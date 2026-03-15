@@ -9,8 +9,10 @@ import AssetTable from "@/components/AssetTable";
 import FuturePredictions from "@/components/FuturePredictions";
 import { getStockSymbols, predictPortfolio, explainPortfolio } from "@/lib/dataEngine";
 import type { PortfolioAsset, PortfolioResult } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 
 const Index = () => {
+  const { user, logout } = useAuth();
   const [symbols, setSymbols] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
@@ -74,14 +76,18 @@ const Index = () => {
               <span className="ml-2 text-sm font-normal text-blue-500">🇺🇸 US Market</span>
             </h1>
             <p className="text-xs text-muted-foreground">S&P 500 · ML-powered analysis · {symbols.length} stocks</p>
+            <p className="text-xs text-muted-foreground">Logged in as {user?.name || user?.email}</p>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
             <a 
               href="/india" 
               className="text-sm text-muted-foreground hover:text-primary transition-colors"
             >
               Switch to Indian Market 🇮🇳
             </a>
+            <Button variant="outline" size="sm" onClick={logout}>
+              Logout
+            </Button>
           </div>
         </div>
       </header>
