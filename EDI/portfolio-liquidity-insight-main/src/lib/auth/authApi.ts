@@ -1,6 +1,19 @@
 import type { AuthResponse, MeResponse } from "./types";
 
-const AUTH_API_BASE = import.meta.env.VITE_AUTH_API_BASE || "/api";
+const rawAuthBase =
+  import.meta.env.VITE_AUTH_API_BASE ||
+  import.meta.env.VITE_AUTH_BASE ||
+  "/api";
+
+const normalizeAuthBase = (base: string): string => {
+  const trimmed = (base || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return "/api";
+  if (trimmed === "/api" || trimmed.endsWith("/api")) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return `${trimmed}/api`;
+  return trimmed;
+};
+
+const AUTH_API_BASE = normalizeAuthBase(rawAuthBase);
 
 const requestJson = async <T>(input: string, init?: RequestInit): Promise<T> => {
   try {
