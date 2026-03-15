@@ -1,0 +1,82 @@
+# Portfolio Liquidity Prediction – Important Formulas
+
+## 1. Bid-Ask Spread
+
+Bid-Ask Spread = Ask Price − Bid Price
+
+Bid-Ask Spread (%) = (Ask Price − Bid Price) / Ask Price
+
+---
+
+## 2. Turnover Ratio
+
+Turnover Ratio = Trading Volume / Shares Outstanding
+
+---
+
+## 3. Return
+
+Return = (Price_t − Price_(t−1)) / Price_(t−1)
+
+---
+
+## 4. Amihud Illiquidity Measure
+
+Amihud Illiquidity = |Return| / Trading Volume
+
+---
+
+## 5. Price Impact
+
+Price Impact = Trade Size / Average Daily Volume
+
+---
+
+## 6. Liquidity Score
+
+Liquidity Score = w1 × Volume Score + w2 × Spread Score + w3 × Turnover Score
+
+w1 + w2 + w3 = 1
+
+Example:
+Liquidity Score = 0.4 × Volume + 0.3 × Spread + 0.3 × Turnover
+
+---
+
+## 7. Portfolio Value
+
+Portfolio Value = Σ (Price_i × Quantity_i)
+
+---
+
+## 8. Portfolio Weight
+
+Weight_i = Asset Value_i / Total Portfolio Value
+
+---
+
+## 9. Portfolio Liquidity Score
+
+Portfolio Liquidity Score = Σ (Weight_i × Liquidity_i)
+
+---
+
+## 10. Estimated Liquidation Time
+
+Liquidation Time = Position Size / Average Daily Volume
+
+Portfolio Liquidation Time = Σ (Position_i / ADV_i)
+
+---
+
+## 11. Expected Return
+
+Expected Return = (Price_future − Price_current) / Price_current
+
+---
+
+## 12. Portfolio Return
+
+Portfolio Return = Σ (Weight_i × Return_i)
+
+---
