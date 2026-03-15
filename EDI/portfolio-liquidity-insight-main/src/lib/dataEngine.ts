@@ -3,6 +3,10 @@ import type { PortfolioAsset, PortfolioResult } from "./types";
 // ── Flask API base URL ─────────────────────────────────────────────────────────
 const API_BASE = resolveApiBase();
 
+if (typeof window !== "undefined") {
+  console.info("[ML API] Base URL:", API_BASE);
+}
+
 function resolveApiBase(): string {
   const fromEnv = (import.meta.env.VITE_ML_API_BASE as string | undefined)?.trim();
   if (fromEnv) {
