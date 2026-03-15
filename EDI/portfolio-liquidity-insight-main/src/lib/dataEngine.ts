@@ -1,7 +1,21 @@
 import type { PortfolioAsset, PortfolioResult } from "./types";
 
 // ── Flask API base URL ─────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:5000";
+const API_BASE = resolveApiBase();
+
+function resolveApiBase(): string {
+  const fromEnv = (import.meta.env.VITE_ML_API_BASE as string | undefined)?.trim();
+  if (fromEnv) {
+    return fromEnv.replace(/\/+$/, "");
+  }
+
+  // Local dev keeps existing behavior, production falls back to same-origin.
+  if (import.meta.env.DEV) {
+    return "http://localhost:5000";
+  }
+
+  return window.location.origin;
+}
 
 // ============================================================
 // GET /stocks  →  ticker list for the search autocomplete
