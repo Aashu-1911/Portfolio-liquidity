@@ -5,14 +5,30 @@ const authRouter = require("./routes/authRoutes");
 
 const app = express();
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  if (env.frontendOrigins.includes(origin)) {
+    return true;
+  }
+
+  // Allow Vercel production and preview deployments (e.g. *.vercel.app)
+  try {
+    const host = new URL(origin).hostname;
+    if (host.endsWith(".vercel.app")) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+};
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (env.frontendOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
 
