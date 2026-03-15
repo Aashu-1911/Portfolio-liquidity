@@ -13,12 +13,12 @@ function resolveApiBase(): string {
     return fromEnv.replace(/\/+$/, "");
   }
 
-  // Local dev keeps existing behavior, production falls back to same-origin.
+  // Local dev keeps existing behavior, production uses hosted ML fallback.
   if (import.meta.env.DEV) {
     return "http://localhost:5000";
   }
 
-  return window.location.origin;
+  return "https://liquidity-api-s804.onrender.com";
 }
 
 // ============================================================
