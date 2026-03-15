@@ -8,6 +8,12 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      "/api": {
+        target: process.env.VITE_AUTH_PROXY_TARGET || "http://localhost:5001",
+        changeOrigin: true,
+      },
+    },
     hmr: {
       overlay: false,
     },

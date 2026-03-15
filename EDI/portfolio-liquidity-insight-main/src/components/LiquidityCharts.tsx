@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, RadarChart, Radar, PolarGrid,
+  PolarAngleAxis, PolarRadiusAxis,
 } from "recharts";
 import type { PortfolioResult } from "@/lib/types";
 
@@ -11,32 +11,22 @@ interface ChartsProps {
 }
 
 const COLORS = [
-  "hsl(160, 84%, 44%)",
-  "hsl(200, 80%, 55%)",
-  "hsl(38, 92%, 50%)",
-  "hsl(0, 72%, 55%)",
-  "hsl(270, 70%, 60%)",
-  "hsl(160, 60%, 60%)",
-  "hsl(200, 60%, 70%)",
+  "#16C784", "#3B82F6", "#F59E0B", "#EA3943", "#8B5CF6", "#06B6D4", "#F97316",
 ];
 
-const customTooltipStyle = {
-  backgroundColor: "hsl(220, 18%, 9%)",
-  border: "1px solid hsl(220, 14%, 18%)",
-  borderRadius: "8px",
-  color: "hsl(210, 20%, 92%)",
+const tooltipStyle = {
+  backgroundColor: "#1a2235",
+  border: "1px solid #1F2937",
+  borderRadius: "10px",
+  color: "#e5e7eb",
   fontSize: "12px",
+  padding: "8px 12px",
 };
 
 export default function LiquidityCharts({ result }: ChartsProps) {
   const barData = result.assets.map((a) => ({
     name: a.symbol,
     score: Math.round(a.liquidity_score * 100),
-  }));
-
-  const riskData = result.assets.map((a) => ({
-    name: a.symbol,
-    risk: a.risk_level === "Low" ? 1 : a.risk_level === "Moderate" ? 2 : 3,
   }));
 
   const pieData = result.assets.map((a) => ({
@@ -47,102 +37,119 @@ export default function LiquidityCharts({ result }: ChartsProps) {
   const radarData = result.assets.map((a) => ({
     symbol: a.symbol,
     liquidity: Math.round(a.liquidity_score * 100),
-    weight: Math.round(a.weight * 100),
+    weight:    Math.round(a.weight * 100),
   }));
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* Liquidity Comparison */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+      {/* Liquidity Score Bar */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="glass-card p-5"
+      >
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+          Asset Liquidity Scores
+        </h3>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={barData} barSize={24}>
+            <XAxis dataKey="name" tick={{ fill: "#6b7280", fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} />
+            <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.02)" }} />
+            <Bar dataKey="score" radius={[5, 5, 0, 0]}>
+              {barData.map((d, i) => (
+                <Cell
+                  key={i}
+                  fill={d.score >= 60 ? "#16C784" : d.score >= 30 ? "#F59E0B" : "#EA3943"}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </motion.div>
+
+      {/* Portfolio Allocation Donut */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
         className="glass-card p-5"
       >
-        <h3 className="text-sm font-semibold text-foreground mb-4">Asset Liquidity Scores</h3>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={barData} barSize={28}>
-            <XAxis dataKey="name" tick={{ fill: "hsl(215, 12%, 50%)", fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "hsl(215, 12%, 50%)", fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} />
-            <Tooltip contentStyle={customTooltipStyle} cursor={{ fill: "hsl(220, 14%, 10%)" }} />
-            <Bar dataKey="score" radius={[6, 6, 0, 0]}>
-              {barData.map((_, i) => (
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+          Portfolio Allocation
+        </h3>
+        <ResponsiveContainer width="100%" height={200}>
+          <PieChart>
+            <Pie
+              data={pieData}
+              cx="50%"
+              cy="50%"
+              innerRadius={48}
+              outerRadius={80}
+              paddingAngle={3}
+              dataKey="value"
+              strokeWidth={0}
+            >
+              {pieData.map((_, i) => (
                 <Cell key={i} fill={COLORS[i % COLORS.length]} />
               ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </motion.div>
-
-      {/* Portfolio Allocation */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="glass-card p-5"
-      >
-        <h3 className="text-sm font-semibold text-foreground mb-4">Portfolio Allocation</h3>
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value">
-              {pieData.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="transparent" />
-              ))}
             </Pie>
-            <Tooltip contentStyle={customTooltipStyle} formatter={(v: number) => `${v}%`} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => `${v}%`} />
           </PieChart>
         </ResponsiveContainer>
-        <div className="flex flex-wrap gap-3 justify-center mt-2">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center">
           {pieData.map((d, i) => (
-            <div key={d.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+            <div key={d.name} className="flex items-center gap-1.5 text-[10px] text-gray-500">
+              <div className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
               {d.name}
             </div>
           ))}
         </div>
       </motion.div>
 
-      {/* Risk Bar Chart */}
+      {/* Risk Radar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="glass-card p-5"
+        transition={{ delay: 0.3 }}
+        className="glass-card p-5 lg:col-span-2 xl:col-span-1"
       >
-        <h3 className="text-sm font-semibold text-foreground mb-4">Risk Assessment</h3>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={riskData} barSize={28} layout="vertical">
-            <XAxis type="number" domain={[0, 3]} tick={{ fill: "hsl(215, 12%, 50%)", fontSize: 11 }} axisLine={false} tickLine={false}
-              tickFormatter={(v) => ["", "Low", "Mod", "High"][v] || ""} />
-            <YAxis type="category" dataKey="name" tick={{ fill: "hsl(215, 12%, 50%)", fontSize: 11 }} axisLine={false} tickLine={false} width={50} />
-            <Tooltip contentStyle={customTooltipStyle} formatter={(v: number) => ["", "Low", "Moderate", "High"][v]} />
-            <Bar dataKey="risk" radius={[0, 6, 6, 0]}>
-              {riskData.map((d, i) => (
-                <Cell key={i} fill={d.risk === 1 ? COLORS[0] : d.risk === 2 ? COLORS[2] : COLORS[3]} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </motion.div>
-
-      {/* Radar */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="glass-card p-5"
-      >
-        <h3 className="text-sm font-semibold text-foreground mb-4">Liquidity vs Weight</h3>
-        <ResponsiveContainer width="100%" height={220}>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+          Liquidity vs Weight
+        </h3>
+        <ResponsiveContainer width="100%" height={200}>
           <RadarChart data={radarData}>
-            <PolarGrid stroke="hsl(220, 14%, 18%)" />
-            <PolarAngleAxis dataKey="symbol" tick={{ fill: "hsl(215, 12%, 50%)", fontSize: 11 }} />
-            <PolarRadiusAxis tick={{ fill: "hsl(215, 12%, 40%)", fontSize: 10 }} domain={[0, 100]} />
-            <Radar name="Liquidity" dataKey="liquidity" stroke={COLORS[0]} fill={COLORS[0]} fillOpacity={0.2} />
-            <Radar name="Weight" dataKey="weight" stroke={COLORS[1]} fill={COLORS[1]} fillOpacity={0.15} />
-            <Tooltip contentStyle={customTooltipStyle} />
+            <PolarGrid stroke="#1F2937" />
+            <PolarAngleAxis dataKey="symbol" tick={{ fill: "#6b7280", fontSize: 10 }} />
+            <PolarRadiusAxis tick={{ fill: "#4b5563", fontSize: 9 }} domain={[0, 100]} />
+            <Radar
+              name="Liquidity"
+              dataKey="liquidity"
+              stroke="#16C784"
+              fill="#16C784"
+              fillOpacity={0.18}
+              strokeWidth={2}
+            />
+            <Radar
+              name="Weight"
+              dataKey="weight"
+              stroke="#3B82F6"
+              fill="#3B82F6"
+              fillOpacity={0.12}
+              strokeWidth={1.5}
+            />
+            <Tooltip contentStyle={tooltipStyle} />
           </RadarChart>
         </ResponsiveContainer>
+        <div className="flex items-center gap-4 justify-center mt-1">
+          <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+            <div className="w-5 h-0.5 bg-[#16C784]" /> Liquidity
+          </div>
+          <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+            <div className="w-5 h-0.5 bg-[#3B82F6]" /> Weight
+          </div>
+        </div>
       </motion.div>
     </div>
   );

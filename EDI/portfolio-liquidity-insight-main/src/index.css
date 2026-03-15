@@ -6,96 +6,321 @@
 
 @layer base {
   :root {
-    --background: 220 20% 4%;
+    /* ── Bloomberg Terminal Dark Theme ─────────────────────── */
+    --background: 220 20% 7%;
     --foreground: 210 20% 92%;
 
-    --card: 220 18% 7%;
+    --card: 222 25% 11%;
     --card-foreground: 210 20% 92%;
 
-    --popover: 220 18% 9%;
+    --popover: 222 25% 13%;
     --popover-foreground: 210 20% 92%;
 
-    --primary: 160 84% 44%;
+    --primary: 142 76% 43%;       /* #16C784 */
     --primary-foreground: 220 20% 4%;
 
-    --secondary: 220 16% 14%;
+    --secondary: 220 18% 16%;
     --secondary-foreground: 210 20% 80%;
 
-    --muted: 220 14% 12%;
+    --muted: 220 14% 13%;
     --muted-foreground: 215 12% 50%;
 
-    --accent: 200 80% 55%;
+    --accent: 217 91% 60%;        /* #3B82F6 */
     --accent-foreground: 220 20% 4%;
 
-    --destructive: 0 72% 55%;
+    --destructive: 354 70% 57%;   /* #EA3943 */
     --destructive-foreground: 210 40% 98%;
 
-    --border: 220 14% 14%;
+    --border: 220 16% 18%;        /* #1F2937 */
     --input: 220 14% 16%;
-    --ring: 160 84% 44%;
+    --ring: 142 76% 43%;
 
     --radius: 0.75rem;
 
-    --warning: 38 92% 50%;
+    --warning: 38 92% 50%;        /* #F59E0B */
     --warning-foreground: 220 20% 4%;
-    --success: 160 84% 44%;
+    --success: 142 76% 43%;
     --success-foreground: 220 20% 4%;
 
-    --chart-green: 160 84% 44%;
-    --chart-blue: 200 80% 55%;
-    --chart-amber: 38 92% 50%;
-    --chart-red: 0 72% 55%;
+    --chart-green:  142 76% 43%;
+    --chart-blue:   217 91% 60%;
+    --chart-amber:  38 92% 50%;
+    --chart-red:    354 70% 57%;
     --chart-purple: 270 70% 60%;
 
-    --glow-primary: 0 0% 0% / 0;
-    --gradient-primary: linear-gradient(135deg, hsl(160 84% 44%), hsl(200 80% 55%));
+    --gradient-primary: linear-gradient(135deg, #16C784, #3B82F6);
 
-    --sidebar-background: 220 18% 6%;
-    --sidebar-foreground: 210 20% 80%;
-    --sidebar-primary: 160 84% 44%;
+    --sidebar-background:        222 25% 8%;
+    --sidebar-foreground:        210 20% 80%;
+    --sidebar-primary:           142 76% 43%;
     --sidebar-primary-foreground: 220 20% 4%;
-    --sidebar-accent: 220 14% 12%;
+    --sidebar-accent:            220 14% 12%;
     --sidebar-accent-foreground: 210 20% 80%;
-    --sidebar-border: 220 14% 14%;
-    --sidebar-ring: 160 84% 44%;
+    --sidebar-border:            220 16% 18%;
+    --sidebar-ring:              142 76% 43%;
 
     font-family: 'Inter', system-ui, sans-serif;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
 
   body {
     @apply bg-background text-foreground antialiased;
+    background-color: #0B0F19;
   }
+
+  /* ── Custom scrollbar ───────────────────────────────────── */
+  ::-webkit-scrollbar        { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track  { background: #0d1520; }
+  ::-webkit-scrollbar-thumb  { background: #1F2937; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #374151; }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   TYPOGRAPHY HIERARCHY
+═══════════════════════════════════════════════════════════ */
 @layer utilities {
-  .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+
+  /* LEVEL 1 – Section Headers (e.g. "Advanced Liquidity Metrics") */
+  .type-section-header {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #F9FAFB;
+    line-height: 1.3;
   }
 
+  /* LEVEL 2 – Card Titles (e.g. "Bid-Ask Spread") */
+  .type-card-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #9CA3AF;
+    letter-spacing: 0.01em;
+    line-height: 1.4;
+  }
+
+  /* LEVEL 3 – Metric Values (e.g. "2.163%") */
+  .type-metric-value {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    font-family: 'JetBrains Mono', monospace;
+    color: #FACC15;   /* high-contrast yellow-white for maximum readability */
+  }
+
+  /* Sub-label under metric (units / helper text) */
+  .type-metric-label {
+    font-size: 11px;
+    font-weight: 400;
+    color: #6B7280;
+    letter-spacing: 0.02em;
+  }
+
+  /* Table / data font */
+  .type-data {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: #D1D5DB;
+  }
+
+  /* ── monospace override ──────────────────────────────── */
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ── gradient text ───────────────────────────────────── */
   .text-gradient {
     @apply bg-clip-text text-transparent;
     background-image: var(--gradient-primary);
   }
 
+/* ═══════════════════════════════════════════════════════════
+   CARDS & CONTAINERS
+═══════════════════════════════════════════════════════════ */
+
+  /* Base card */
   .glass-card {
-    @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-xl;
+    background: #111827;
+    border: 1px solid #1F2937;
+    border-radius: 12px;
+    backdrop-filter: blur(16px);
+  }
+
+  /* Card padding standard: 24px */
+  .card-pad { padding: 24px; }
+
+  /* Elevated fintech card with gradient background */
+  .fintech-card {
+    background: linear-gradient(145deg, #111827 0%, #0d1520 100%);
+    border: 1px solid #1F2937;
+    border-radius: 12px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  }
+  .fintech-card:hover {
+    border-color: #374151;
+    box-shadow: 0 6px 32px rgba(59, 130, 246, 0.08);
+    transform: translateY(-1px);
+  }
+
+  /* Metric card variant */
+  .metric-card {
+    background: #111827;
+    border: 1px solid #1F2937;
+    border-radius: 12px;
+    padding: 20px 22px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .metric-card:hover {
+    border-color: #374151;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
   }
 
   .glow-border {
-    box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.15),
-                inset 0 0 20px -5px hsl(var(--primary) / 0.05);
+    box-shadow: 0 0 24px -6px rgba(22, 199, 132, 0.18),
+                inset 0 0 24px -6px rgba(22, 199, 132, 0.06);
+  }
+  .glow-blue {
+    box-shadow: 0 0 20px -5px rgba(59, 130, 246, 0.2);
   }
 
-  .score-gauge {
-    background: conic-gradient(
-      hsl(var(--primary)) var(--score-percent, 0%),
-      hsl(var(--muted)) var(--score-percent, 0%)
-    );
+/* ═══════════════════════════════════════════════════════════
+   SECTION WRAPPERS & DIVIDERS
+═══════════════════════════════════════════════════════════ */
+
+  /* Wrapper for every major dashboard zone */
+  .dashboard-section {
+    padding-top: 8px;
+    padding-bottom: 8px;
   }
+
+  /* Section header row with trailing divider line */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .section-header .section-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #F9FAFB;
+    white-space: nowrap;
+  }
+  .section-header::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, #1F2937 0%, transparent 100%);
+    margin-left: 8px;
+  }
+
+  /* Section label chip (e.g. "PORTFOLIO ANALYSIS") */
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #4B5563;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+/* ═══════════════════════════════════════════════════════════
+   TICKER & LIVE INDICATOR
+═══════════════════════════════════════════════════════════ */
+
+  .ticker-scroll {
+    animation: ticker-scroll 40s linear infinite;
+  }
+  .ticker-scroll:hover { animation-play-state: paused; }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #16C784;
+    animation: live-pulse 2s ease-in-out infinite;
+  }
+
+/* ═══════════════════════════════════════════════════════════
+   TABLE
+═══════════════════════════════════════════════════════════ */
+
+  .watchlist-row {
+    transition: background-color 0.15s ease;
+    border-bottom: 1px solid #1F2937;
+  }
+  .watchlist-row:hover { background: rgba(59, 130, 246, 0.04); }
+
+/* ═══════════════════════════════════════════════════════════
+   SEMANTIC COLORS
+═══════════════════════════════════════════════════════════ */
+
+  .text-profit       { color: #16C784; }
+  .text-loss         { color: #EA3943; }
+  .text-warn         { color: #F59E0B; }
+  .text-blue-accent  { color: #3B82F6; }
+  .text-metric       { color: #FACC15; }
+
+  .bg-profit\/10 { background: rgba(22, 199, 132, 0.10); }
+  .bg-loss\/10   { background: rgba(234, 57,  67,  0.10); }
+  .bg-warn\/10   { background: rgba(245, 158, 11,  0.10); }
+  .bg-blue\/10   { background: rgba(59,  130, 246, 0.10); }
+
+/* ═══════════════════════════════════════════════════════════
+   INSIGHT CARD VARIANTS
+═══════════════════════════════════════════════════════════ */
+
+  .insight-trend {
+    background: linear-gradient(135deg, rgba(59,130,246,0.10) 0%, rgba(59,130,246,0.03) 100%);
+    border: 1px solid rgba(59,130,246,0.22);
+  }
+  .insight-risk {
+    background: linear-gradient(135deg, rgba(234,57,67,0.10) 0%, rgba(234,57,67,0.03) 100%);
+    border: 1px solid rgba(234,57,67,0.22);
+  }
+  .insight-rec {
+    background: linear-gradient(135deg, rgba(22,199,132,0.10) 0%, rgba(22,199,132,0.03) 100%);
+    border: 1px solid rgba(22,199,132,0.22);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   KEYFRAMES
+═══════════════════════════════════════════════════════════ */
+
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(22,199,132,0.5); }
+  50%       { opacity: 0.6; box-shadow: 0 0 0 5px rgba(22,199,132,0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to   { height: var(--radix-accordion-content-height); }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to   { height: 0; }
 }

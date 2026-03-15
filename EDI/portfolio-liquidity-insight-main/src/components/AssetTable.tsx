@@ -6,17 +6,16 @@ interface Props {
 }
 
 export default function AssetTable({ assets }: Props) {
-  const riskColor = (risk: string) => {
-    if (risk === "Low")      return "text-success bg-success/10";
-    if (risk === "Moderate") return "text-warning bg-warning/10";
-    return "text-destructive bg-destructive/10";
+  const riskStyle = (risk: string) => {
+    if (risk === "Low")
+      return { color: "#16C784", bg: "rgba(22,199,132,0.1)", border: "rgba(22,199,132,0.25)" };
+    if (risk === "Moderate")
+      return { color: "#F59E0B", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)"  };
+    return   { color: "#EA3943", bg: "rgba(234,57,67,0.1)",   border: "rgba(234,57,67,0.25)"   };
   };
 
-  const scoreColor = (score: number) => {
-    if (score >= 0.6) return "text-success";
-    if (score >= 0.4) return "text-warning";
-    return "text-destructive";
-  };
+  const scoreColor = (score: number) =>
+    score >= 0.6 ? "#16C784" : score >= 0.3 ? "#F59E0B" : "#EA3943";
 
   return (
     <motion.div
@@ -25,118 +24,149 @@ export default function AssetTable({ assets }: Props) {
       transition={{ delay: 0.3 }}
       className="glass-card overflow-hidden"
     >
-      <div className="px-5 py-4 border-b border-border/50">
-        <h3 className="text-sm font-semibold text-foreground">Asset Breakdown</h3>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Per-stock ML features and liquidity metrics
-        </p>
+      {/* Header */}
+      <div
+        className="px-5 py-3.5 flex items-center justify-between"
+        style={{ borderBottom: "1px solid #1F2937" }}
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-gray-200">Asset Breakdown</h3>
+          <p className="text-[11px] text-gray-500 mt-0.5">Per-stock ML liquidity analysis</p>
+        </div>
+        <span
+          className="text-[11px] font-mono px-2 py-0.5 rounded"
+          style={{ background: "rgba(59,130,246,0.1)", color: "#3B82F6" }}
+        >
+          {assets.length} position{assets.length !== 1 ? "s" : ""}
+        </span>
       </div>
 
+      {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-xs">
           <thead>
-            <tr className="text-muted-foreground text-xs border-b border-border/30 bg-secondary/30">
-              {/* Identity */}
-              <th className="text-left  px-4 py-3 font-medium">Symbol</th>
-              <th className="text-right px-4 py-3 font-medium">Qty</th>
-              <th className="text-right px-4 py-3 font-medium">Close</th>
-              <th className="text-right px-4 py-3 font-medium">Value</th>
-              <th className="text-right px-4 py-3 font-medium">Weight</th>
-              {/* ML outputs */}
-              <th className="text-right px-4 py-3 font-medium">Score</th>
-              <th className="text-center px-4 py-3 font-medium">Risk</th>
-              <th className="text-right px-4 py-3 font-medium">Liq. Time</th>
-              {/* ML features */}
-              <th className="text-right px-4 py-3 font-medium">Spread</th>
-              <th className="text-right px-4 py-3 font-medium">Volatility</th>
-              <th className="text-right px-4 py-3 font-medium">Amihud</th>
+            <tr style={{ background: "#0d1520", borderBottom: "1px solid #1F2937" }}>
+              {[
+                ["Symbol", "left"],
+                ["Qty", "right"],
+                ["Price", "right"],
+                ["Value", "right"],
+                ["Weight", "right"],
+                ["Score", "right"],
+                ["Risk", "center"],
+                ["Liq. Time", "right"],
+                ["Spread", "right"],
+                ["Volatility", "right"],
+                ["Amihud", "right"],
+              ].map(([h, align]) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 font-semibold text-[10px] uppercase tracking-wider text-gray-600"
+                  style={{ textAlign: align as any }}
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {assets.map((a, i) => (
-              <motion.tr
-                key={a.symbol}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.05 * i }}
-                className="border-b border-border/20 hover:bg-secondary/30 transition-colors"
-              >
-                {/* Symbol */}
-                <td className="px-4 py-3 font-mono font-semibold text-primary">
-                  {a.symbol}
-                </td>
+            {assets.map((a, i) => {
+              const rs = riskStyle(a.risk_level);
+              const sc = scoreColor(a.liquidity_score);
+              return (
+                <motion.tr
+                  key={a.symbol}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.04 * i }}
+                  className="watchlist-row group"
+                >
+                  {/* Symbol */}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: sc }} />
+                      <span className="font-mono font-bold text-[#3B82F6]">{a.symbol}</span>
+                    </div>
+                  </td>
 
-                {/* Qty */}
-                <td className="px-4 py-3 text-right text-foreground font-mono">
-                  {a.qty.toLocaleString()}
-                </td>
+                  {/* Qty */}
+                  <td className="px-4 py-3 text-right font-mono text-gray-300">
+                    {a.qty.toLocaleString()}
+                  </td>
 
-                {/* Close price */}
-                <td className="px-4 py-3 text-right text-foreground font-mono">
-                  ${a.close.toFixed(2)}
-                </td>
+                  {/* Price */}
+                  <td className="px-4 py-3 text-right font-mono text-gray-200">
+                    ${a.close.toFixed(2)}
+                  </td>
 
-                {/* Position value */}
-                <td className="px-4 py-3 text-right text-foreground font-mono">
-                  ${a.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </td>
+                  {/* Value */}
+                  <td className="px-4 py-3 text-right font-mono text-gray-200">
+                    ${a.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </td>
 
-                {/* Weight */}
-                <td className="px-4 py-3 text-right text-muted-foreground font-mono">
-                  {(a.weight * 100).toFixed(1)}%
-                </td>
+                  {/* Weight */}
+                  <td className="px-4 py-3 text-right font-mono text-gray-400">
+                    {(a.weight * 100).toFixed(1)}%
+                  </td>
 
-                {/* Liquidity score */}
-                <td className={`px-4 py-3 text-right font-mono font-semibold ${scoreColor(a.liquidity_score)}`}>
-                  {(a.liquidity_score * 100).toFixed(1)}
-                </td>
+                  {/* Score */}
+                  <td className="px-4 py-3 text-right">
+                    <span className="font-mono font-bold" style={{ color: sc }}>
+                      {(a.liquidity_score * 100).toFixed(1)}
+                    </span>
+                  </td>
 
-                {/* Risk badge */}
-                <td className="px-4 py-3 text-center">
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${riskColor(a.risk_level)}`}>
-                    {a.risk_level}
-                  </span>
-                </td>
+                  {/* Risk */}
+                  <td className="px-4 py-3 text-center">
+                    <span
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded"
+                      style={{ background: rs.bg, color: rs.color, border: `1px solid ${rs.border}` }}
+                    >
+                      {a.risk_level}
+                    </span>
+                  </td>
 
-                {/* Liquidation time */}
-                <td className="px-4 py-3 text-right text-muted-foreground font-mono text-xs">
-                  {a.liquidation_time}
-                </td>
+                  {/* Liquidation time */}
+                  <td className="px-4 py-3 text-right font-mono text-gray-500 text-[11px]">
+                    {a.liquidation_time}
+                  </td>
 
-                {/* Spread proxy */}
-                <td className="px-4 py-3 text-right text-muted-foreground font-mono text-xs">
-                  {(a.spread_proxy * 100).toFixed(3)}%
-                </td>
+                  {/* Spread */}
+                  <td className="px-4 py-3 text-right font-mono text-gray-500 text-[11px]">
+                    {(a.spread_proxy * 100).toFixed(3)}%
+                  </td>
 
-                {/* Volatility */}
-                <td className="px-4 py-3 text-right text-muted-foreground font-mono text-xs">
-                  {(a.volatility * 100).toFixed(3)}%
-                </td>
+                  {/* Volatility */}
+                  <td className="px-4 py-3 text-right font-mono text-gray-500 text-[11px]">
+                    {(a.volatility * 100).toFixed(3)}%
+                  </td>
 
-                {/* Amihud ratio */}
-                <td className="px-4 py-3 text-right text-muted-foreground font-mono text-xs">
-                  {a.amihud_ratio.toFixed(6)}
-                </td>
-              </motion.tr>
-            ))}
+                  {/* Amihud */}
+                  <td className="px-4 py-3 text-right font-mono text-gray-500 text-[11px]">
+                    {a.amihud_ratio.toFixed(6)}
+                  </td>
+                </motion.tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Legend */}
-      <div className="px-5 py-3 border-t border-border/30 bg-secondary/20 flex flex-wrap gap-x-6 gap-y-1">
-        <span className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Score</span> — ML liquidity score (0–100)
-        </span>
-        <span className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Spread</span> — (High−Low)/Close proxy
-        </span>
-        <span className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Volatility</span> — 30-day return std dev
-        </span>
-        <span className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Amihud</span> — |Return|/Volume illiquidity ratio
-        </span>
+      {/* Footer */}
+      <div
+        className="px-5 py-3 flex flex-wrap gap-x-6 gap-y-1"
+        style={{ background: "#0d1520", borderTop: "1px solid #1F2937" }}
+      >
+        {[
+          ["Score", "ML liquidity score (0–100)"],
+          ["Spread", "(High−Low)/Close proxy"],
+          ["Volatility", "30-day return std dev"],
+          ["Amihud", "|Return|/Volume illiquidity"],
+        ].map(([k, v]) => (
+          <span key={k} className="text-[10px] text-gray-600">
+            <span className="text-gray-400 font-medium">{k}</span> — {v}
+          </span>
+        ))}
       </div>
     </motion.div>
   );

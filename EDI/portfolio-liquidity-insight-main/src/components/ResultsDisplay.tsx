@@ -1,170 +1,136 @@
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Droplets, Shield, Clock, TrendingDown, AlertTriangle,
-  DollarSign, Cpu, Info
+  Shield, Clock, TrendingDown, AlertTriangle, DollarSign, Info
 } from "lucide-react";
 import type { PortfolioResult } from "@/lib/types";
+import LiquidityRiskBar from "./LiquidityRiskBar";
 
 interface ResultsDisplayProps {
   result: PortfolioResult;
 }
 
 export default function ResultsDisplay({ result }: ResultsDisplayProps) {
-  const riskColor = {
-    Low:      "text-success",
-    Moderate: "text-warning",
-    High:     "text-destructive",
-  }[result.risk_level] ?? "text-muted-foreground";
-
-  const riskBg = {
-    Low:      "bg-success/10 border-success/20",
-    Moderate: "bg-warning/10 border-warning/20",
-    High:     "bg-destructive/10 border-destructive/20",
-  }[result.risk_level] ?? "";
-
-  // Score arc color
-  const gaugeColor =
-    result.liquidity_score >= 0.6
-      ? "hsl(160, 84%, 44%)"   // green
-      : result.liquidity_score >= 0.4
-      ? "hsl(38, 92%, 50%)"    // amber
-      : "hsl(0, 72%, 55%)";    // red
+  const riskInfo = {
+    Low:      { color: "#16C784", bg: "rgba(22,199,132,0.08)", border: "rgba(22,199,132,0.2)" },
+    Moderate: { color: "#F59E0B", bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.2)"  },
+    High:     { color: "#EA3943", bg: "rgba(234,57,67,0.08)",   border: "rgba(234,57,67,0.2)"   },
+  }[result.risk_level] ?? { color: "#6b7280", bg: "rgba(107,114,128,0.08)", border: "rgba(107,114,128,0.2)" };
 
   const metrics = [
     {
       label: "Risk Level",
       value: result.risk_level,
-      icon:  Shield,
-      color: riskColor,
-      bg:    riskBg,
+      icon: Shield,
+      color: riskInfo.color,
+      bg: riskInfo.bg,
+      border: riskInfo.border,
     },
     {
-      label: "Est. Liquidation Time",
+      label: "Liquidation Time",
       value: result.estimated_liquidation_time,
-      icon:  Clock,
-      color: "text-accent",
-      bg:    "bg-accent/10",
+      icon: Clock,
+      color: "#3B82F6",
+      bg: "rgba(59,130,246,0.08)",
+      border: "rgba(59,130,246,0.2)",
     },
     {
-      label: "Expected Price Impact",
+      label: "Price Impact",
       value: result.price_impact,
-      icon:  TrendingDown,
-      color: "text-chart-amber",
-      bg:    "bg-warning/10",
+      icon: TrendingDown,
+      color: "#F59E0B",
+      bg: "rgba(245,158,11,0.08)",
+      border: "rgba(245,158,11,0.2)",
     },
     {
-      label: "Most Illiquid Asset",
+      label: "Most Illiquid",
       value: result.most_illiquid_asset,
-      icon:  AlertTriangle,
-      color: "text-destructive",
-      bg:    "bg-destructive/10",
+      icon: AlertTriangle,
+      color: "#EA3943",
+      bg: "rgba(234,57,67,0.08)",
+      border: "rgba(234,57,67,0.2)",
     },
     {
       label: "Portfolio Value",
       value: result.portfolio_value,
-      icon:  DollarSign,
-      color: "text-primary",
-      bg:    "bg-primary/10",
+      icon: DollarSign,
+      color: "#16C784",
+      bg: "rgba(22,199,132,0.08)",
+      border: "rgba(22,199,132,0.2)",
     },
     {
       label: "Total Positions",
       value: String(result.total_positions),
-      icon:  Info,
-      color: "text-muted-foreground",
-      bg:    "bg-secondary",
+      icon: Info,
+      color: "#6b7280",
+      bg: "rgba(107,114,128,0.06)",
+      border: "rgba(107,114,128,0.15)",
     },
   ];
 
   return (
     <div className="space-y-4">
-
-      {/* ── Score Gauge ──────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="glass-card glow-border p-6 flex flex-col items-center"
-      >
-        {/* Circular gauge */}
-        <div
-          className="relative w-36 h-36 rounded-full flex items-center justify-center mb-4"
-          style={{
-            background: `conic-gradient(
-              ${gaugeColor} 0% ${result.liquidity_score * 100}%,
-              hsl(220, 14%, 18%) ${result.liquidity_score * 100}% 100%
-            )`,
-            padding: "3px",
-            borderRadius: "50%",
-          }}
-        >
-          <div className="w-full h-full rounded-full bg-card flex items-center justify-center flex-col">
-            <span className="text-3xl font-bold font-mono" style={{ color: gaugeColor }}>
-              {(result.liquidity_score * 100).toFixed(0)}
-            </span>
-            <span className="text-xs text-muted-foreground">/ 100</span>
-          </div>
-        </div>
-        <h3 className="text-sm font-medium text-muted-foreground">
-          Portfolio Liquidity Score
-        </h3>
-
-        {/* Model badge */}
-        <div className="mt-3 flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary border border-border/50">
-          <Cpu className="w-3 h-3 text-primary" />
-          <span className="text-xs text-muted-foreground font-mono">
-            {result.model_used}
-          </span>
-        </div>
+      {/* Liquidity Risk Bar */}
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+        <LiquidityRiskBar score={result.liquidity_score} modelUsed={result.model_used} />
       </motion.div>
 
-      {/* ── Metric Cards ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Metric cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {metrics.map((m, i) => (
           <motion.div
             key={m.label}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08 + i * 0.07 }}
-            className="glass-card p-4 flex items-center gap-3"
+            transition={{ delay: 0.05 + i * 0.06 }}
+            className="rounded-xl p-3.5"
+            style={{ background: m.bg, border: `1px solid ${m.border}` }}
           >
-            <div
-              className={`w-10 h-10 rounded-lg ${m.bg} flex items-center justify-center shrink-0`}
+            <div className="flex items-center gap-2 mb-2">
+              <div
+                className="w-6 h-6 rounded-md flex items-center justify-center"
+                style={{ background: `${m.color}20` }}
+              >
+                <m.icon className="w-3.5 h-3.5" style={{ color: m.color }} />
+              </div>
+              <p className="text-[11px] text-gray-500 font-medium">{m.label}</p>
+            </div>
+            <p
+              className="text-base font-bold font-mono truncate"
+              style={{ color: m.color }}
             >
-              <m.icon className={`w-5 h-5 ${m.color}`} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">{m.label}</p>
-              <p className={`text-lg font-semibold font-mono truncate ${m.color}`}>
-                {m.value}
-              </p>
-            </div>
+              {m.value}
+            </p>
           </motion.div>
         ))}
       </div>
 
-      {/* ── Warnings ─────────────────────────────────────────────────────── */}
+      {/* Warnings */}
       <AnimatePresence>
         {result.warnings && result.warnings.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="glass-card p-4 border border-destructive/30 bg-destructive/5 space-y-2"
+            className="rounded-xl p-4 space-y-2"
+            style={{
+              background: "rgba(234,57,67,0.06)",
+              border: "1px solid rgba(234,57,67,0.25)",
+            }}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
-              <span className="text-xs font-semibold text-destructive uppercase tracking-wider">
-                Warnings
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-[#EA3943]" />
+              <span className="text-[11px] font-bold text-[#EA3943] uppercase tracking-widest">
+                Risk Warnings
               </span>
             </div>
             {result.warnings.map((w, i) => (
-              <p key={i} className="text-xs text-muted-foreground pl-6">
+              <p key={i} className="text-xs text-gray-400 pl-5 leading-relaxed">
                 · {w}
               </p>
             ))}
           </motion.div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
