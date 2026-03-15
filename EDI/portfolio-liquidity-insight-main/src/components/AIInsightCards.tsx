@@ -8,24 +8,20 @@ interface AIInsightCardsProps {
 }
 
 function parseInsights(text: string, risk: string, score: number) {
-  // Try to extract structured sections from the AI text
   const lower = text.toLowerCase();
-  
-  // Trend: look for improving/declining signals
+
   let trend = "Liquidity conditions are being monitored across portfolio assets.";
   if (lower.includes("improv")) trend = "Liquidity is expected to improve based on current market conditions.";
   else if (lower.includes("declin") || lower.includes("worsen")) trend = "Liquidity may face headwinds in the near term.";
   else if (lower.includes("stable")) trend = "Market trends indicate stable liquidity over the coming sessions.";
 
-  // Risk factors
   let riskFactor = "Standard market risk factors apply. Review concentration in top holdings.";
   if (lower.includes("concentrat")) riskFactor = "Portfolio concentration detected. High exposure in a single asset may amplify liquidity risk.";
   else if (lower.includes("volatil")) riskFactor = "Elevated volatility detected in one or more assets, increasing liquidation time.";
-  else if (risk === "High") riskFactor = "High portfolio risk level detected. Immediate diversification recommended.";
+  else if (risk === "High") riskFactor = "High portfolio risk level detected. Consider immediate diversification.";
 
-  // Recommendation
   let rec = "Monitor bid-ask spreads and consider rebalancing toward higher-volume assets.";
-  if (score < 0.4) rec = "Diversify into high-volume, liquid stocks to reduce liquidation risk.";
+  if (score < 0.4) rec = "Diversify into high-volume liquid stocks to reduce liquidation risk.";
   else if (score >= 0.6) rec = "Portfolio liquidity is healthy. Maintain diversification for continued stability.";
   else rec = "Consider partial rebalancing toward large-cap liquid assets to improve score.";
 
@@ -33,11 +29,7 @@ function parseInsights(text: string, risk: string, score: number) {
 }
 
 export default function AIInsightCards({ aiExplanation, riskLevel = "Moderate", liquidityScore = 0.5 }: AIInsightCardsProps) {
-  const { trend, riskFactor, rec } = parseInsights(
-    aiExplanation ?? "",
-    riskLevel,
-    liquidityScore
-  );
+  const { trend, riskFactor, rec } = parseInsights(aiExplanation ?? "", riskLevel, liquidityScore);
 
   const cards = [
     {
@@ -67,56 +59,62 @@ export default function AIInsightCards({ aiExplanation, riskLevel = "Moderate", 
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="dashboard-section">
+      {/* Section Header */}
       <div className="section-header">
-        <Brain className="w-4 h-4 text-[#3B82F6]" />
-        <span className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
-          AI Liquidity Insights
-        </span>
+        <Brain className="w-5 h-5 flex-shrink-0" style={{ color: "#3B82F6" }} />
+        <span className="section-title">AI Liquidity Insights</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
-        {cards.map((card, i) => (
+      <div className="flex flex-col gap-4">
+        {cards.map((card) => (
           <motion.div
             key={card.title}
-            initial={{ opacity: 0, x: -12 }}
+            initial={{ opacity: 0, x: -14 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: card.delay, duration: 0.4 }}
-            className={`rounded-xl p-4 ${card.variant}`}
+            className={`rounded-xl ${card.variant}`}
+            style={{ padding: "18px 20px" }}
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-4">
               <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
                 style={{ background: `${card.iconColor}18` }}
               >
                 <card.icon className="w-4 h-4" style={{ color: card.iconColor }} />
               </div>
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                {/* Card title */}
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
                   {card.title}
                 </p>
-                <p className="text-sm text-gray-200 leading-relaxed">{card.content}</p>
+                {/* Content */}
+                <p style={{ fontSize: 14, color: "#D1D5DB", lineHeight: 1.6 }}>
+                  {card.content}
+                </p>
               </div>
             </div>
           </motion.div>
         ))}
       </div>
 
+      {/* Full AI explanation */}
       {aiExplanation && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.35 }}
-          className="rounded-xl p-4 mt-2"
+          className="rounded-xl mt-4"
           style={{
-            background: "linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)",
+            padding: "16px 20px",
+            background: "rgba(255,255,255,0.018)",
             border: "1px solid #1F2937",
           }}
         >
-          <p className="text-xs text-gray-400 uppercase tracking-wider mb-2 font-semibold">
+          <p style={{ fontSize: 10, fontWeight: 700, color: "#4B5563", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
             Full AI Analysis
           </p>
-          <p className="text-xs text-gray-400 leading-relaxed">{aiExplanation}</p>
+          <p style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.7 }}>{aiExplanation}</p>
         </motion.div>
       )}
     </div>

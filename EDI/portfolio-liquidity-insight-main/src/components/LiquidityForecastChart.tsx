@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, ReferenceLine, Area, AreaChart, Dot
+  CartesianGrid, Area, AreaChart,
 } from "recharts";
+import { TrendingUp, TrendingDown } from "lucide-react";
 
 interface LiquidityForecastChartProps {
   currentLiquidity: number;
@@ -13,30 +14,19 @@ interface LiquidityForecastChartProps {
   };
 }
 
-const CustomDot = (props: any) => {
-  const { cx, cy, payload } = props;
-  const isProjected = payload?.projected;
-  return (
-    <circle
-      cx={cx} cy={cy} r={5}
-      fill={isProjected ? "#3B82F6" : "#16C784"}
-      stroke={isProjected ? "#3B82F633" : "#16C78433"}
-      strokeWidth={8}
-    />
-  );
-};
-
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
-  const val = payload[0]?.value;
-  const isProj = payload[0]?.payload?.projected;
+  const val  = payload[0]?.value;
+  const proj = payload[0]?.payload?.projected;
   return (
-    <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "#1a2235", border: "1px solid #1F2937" }}>
-      <p className="text-gray-400 mb-1">{label}</p>
-      <p className="font-mono font-bold" style={{ color: isProj ? "#3B82F6" : "#16C784" }}>
-        Score: {val?.toFixed(1)}
+    <div className="rounded-xl px-4 py-3" style={{ background: "#1a2235", border: "1px solid #1F2937", minWidth: 120 }}>
+      <p style={{ fontSize: 11, color: "#6B7280", marginBottom: 6, fontWeight: 500 }}>{label}</p>
+      <p style={{ fontSize: 18, fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: "#FACC15" }}>
+        {val?.toFixed(1)}
       </p>
-      <p className="text-gray-500">{isProj ? "Projected" : "Current"}</p>
+      <p style={{ fontSize: 11, color: proj ? "#3B82F6" : "#16C784", marginTop: 2 }}>
+        {proj ? "Projected" : "Current"}
+      </p>
     </div>
   );
 };
@@ -50,93 +40,98 @@ export default function LiquidityForecastChart({ currentLiquidity, predictions }
   const t7  = predictions.sevenDays  * 100;
 
   const data = [
-    { label: "Today",    value: cur,  projected: false },
-    { label: "Tomorrow", value: t1,   projected: true  },
-    { label: "3 Days",   value: t3,   projected: true  },
-    { label: "7 Days",   value: t7,   projected: true  },
+    { label: "Today",    value: +cur.toFixed(1), projected: false },
+    { label: "Tomorrow", value: +t1.toFixed(1),  projected: true },
+    { label: "3 Days",   value: +t3.toFixed(1),  projected: true },
+    { label: "7 Days",   value: +t7.toFixed(1),  projected: true },
   ];
 
-  const minVal = Math.floor(Math.min(cur, t1, t3, t7) - 5);
-  const maxVal = Math.ceil(Math.max(cur, t1, t3, t7) + 5);
   const improving = t7 > cur;
+  const delta     = (t7 - cur).toFixed(1);
+  const minVal    = Math.floor(Math.min(cur, t1, t3, t7) - 6);
+  const maxVal    = Math.ceil(Math.max(cur, t1, t3, t7) + 6);
 
   return (
-    <div className="space-y-3">
+    <div className="dashboard-section">
+      {/* Section Header */}
       <div className="section-header">
-        <svg className="w-4 h-4 text-[#3B82F6]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <svg className="w-5 h-5 flex-shrink-0" style={{ color: "#3B82F6" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path d="M2 12C2 12 4 6 9 6s7 12 14 12"/>
         </svg>
-        <span className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
-          Liquidity Forecast
-        </span>
+        <span className="section-title">Liquidity Forecast</span>
         <span
-          className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full font-mono"
+          className="ml-auto rounded-full font-mono text-xs font-semibold px-3 py-1"
           style={{
             background: improving ? "rgba(22,199,132,0.1)" : "rgba(234,57,67,0.1)",
             color: improving ? "#16C784" : "#EA3943",
+            border: `1px solid ${improving ? "rgba(22,199,132,0.2)" : "rgba(234,57,67,0.2)"}`,
           }}
         >
-          {improving ? `↑ +${(t7 - cur).toFixed(1)}` : `↓ ${(t7 - cur).toFixed(1)}`} projected
+          {improving ? `↑ +${delta}` : `↓ ${delta}`} projected
         </span>
       </div>
 
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-5"
+        className="glass-card"
+        style={{ padding: 24 }}
       >
-        {/* KPI row */}
-        <div className="grid grid-cols-4 gap-3 mb-5">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-4 gap-4 mb-8">
           {data.map((d) => (
             <div key={d.label} className="text-center">
-              <p className="text-[11px] text-gray-500 mb-1">{d.label}</p>
-              <p
-                className="text-xl font-bold font-mono"
-                style={{ color: d.projected ? "#3B82F6" : "#16C784" }}
-              >
+              <p style={{ fontSize: 11, color: "#6B7280", fontWeight: 500, marginBottom: 6 }}>{d.label}</p>
+              <p style={{
+                fontSize: 26,
+                fontWeight: 700,
+                fontFamily: "'JetBrains Mono',monospace",
+                color: "#FACC15",
+                lineHeight: 1,
+              }}>
                 {d.value.toFixed(1)}
+              </p>
+              <p style={{ fontSize: 10, color: d.projected ? "#3B82F6" : "#16C784", marginTop: 4 }}>
+                {d.projected ? "Projected" : "Current"}
               </p>
             </div>
           ))}
         </div>
 
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={data} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
+        {/* Area chart */}
+        <ResponsiveContainer width="100%" height={185}>
+          <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="forecastGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#3B82F6" stopOpacity={0.25} />
+                <stop offset="5%"  stopColor="#3B82F6" stopOpacity={0.28} />
                 <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.01} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="#1F2937" strokeDasharray="3 3" vertical={false} />
+            <CartesianGrid stroke="#1F2937" strokeDasharray="3 3" strokeOpacity={0.6} vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fill: "#6b7280", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
+              tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}
+              axisLine={false} tickLine={false}
             />
             <YAxis
               domain={[minVal, maxVal]}
-              tick={{ fill: "#6b7280", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              width={32}
+              tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}
+              axisLine={false} tickLine={false} width={36}
             />
             <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine y={cur} stroke="#16C78440" strokeDasharray="4 4" />
             <Area
               type="monotone"
               dataKey="value"
               stroke="#3B82F6"
               strokeWidth={2.5}
               fill="url(#forecastGrad)"
-              dot={<CustomDot />}
+              dot={{ fill: "#3B82F6", r: 5, strokeWidth: 0 }}
             />
           </AreaChart>
         </ResponsiveContainer>
 
-        <p className="text-[11px] text-gray-600 mt-3 text-center">
-          ML-powered liquidity forecast · Dashed line = current score
+        <p style={{ fontSize: 11, color: "#4B5563", marginTop: 14, textAlign: "center" }}>
+          ML-powered liquidity forecast · Dashed line = current score baseline
         </p>
       </motion.div>
     </div>

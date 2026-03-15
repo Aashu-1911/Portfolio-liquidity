@@ -112,8 +112,20 @@ const Index = () => {
 
           <div className="hidden lg:flex items-center gap-1 ml-6">
             {["Dashboard", "Portfolio", "Analytics"].map((tab, i) => (
-              <button key={tab} className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
-                style={{ color: i === 0 ? "#3B82F6" : "#6b7280", background: i === 0 ? "rgba(59,130,246,0.1)" : "transparent" }}>
+              <button key={tab}
+                className="rounded-lg font-semibold transition-all"
+                style={{
+                  fontSize: 12,
+                  padding: "6px 14px",
+                  fontWeight: i === 0 ? 600 : 500,
+                  color: i === 0 ? "#E5E7EB" : "#6B7280",
+                  background: i === 0 ? "#1F2937" : "transparent",
+                  border: i === 0 ? "1px solid #374151" : "1px solid transparent",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => { if (i !== 0) { e.currentTarget.style.color = "#9CA3AF"; e.currentTarget.style.background = "rgba(31,41,55,0.5)"; } }}
+                onMouseLeave={(e) => { if (i !== 0) { e.currentTarget.style.color = "#6B7280"; e.currentTarget.style.background = "transparent"; } }}
+              >
                 {tab}
               </button>
             ))}
@@ -145,8 +157,9 @@ const Index = () => {
       {/* ─── MAIN ───────────────────────────────────────────── */}
       <main className="max-w-[1600px] mx-auto px-4 lg:px-6 py-6 space-y-6">
 
-        {/* Zone 1: Watchlist | Price Chart | Liquidity Score */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* ── PORTFOLIO ANALYSIS ─────────────────────────── */}
+        <p className="section-label">Portfolio Analysis</p>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-3">
             <div className="lg:sticky lg:top-20">
               <PortfolioInput symbols={symbols} onSubmit={handleSubmit} loading={loading} />
@@ -189,17 +202,18 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Zone 2–5: Only visible after analysis */}
+        {/* ── POST-ANALYSIS ZONES ───────────────────────── */}
         <AnimatePresence>
           {result && (
             <motion.div key="analysis" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="space-y-6">
+              className="space-y-10">
 
-              {/* Advanced Metrics */}
+              {/* ── LIQUIDITY ANALYTICS ── */}
               <AdvancedLiquidityMetrics assets={result.assets} />
 
-              {/* Zone 3: Forecast | AI Insights | News */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* ── FORECAST & INSIGHTS ── */}
+              <p className="section-label">Forecast &amp; Insights</p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Forecast */}
                 <div>
                   {aiPredictions ? (
@@ -248,8 +262,9 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Zone 4: Heatmap | Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* ── PORTFOLIO BREAKDOWN ── */}
+              <p className="section-label">Portfolio Breakdown</p>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-4">
                   <LiquidityHeatmap assets={result.assets} />
                 </div>
