@@ -1,9 +1,10 @@
 import { motion } from "framer-motion";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Area, AreaChart,
 } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import AnimatedSection from "@/components/ui/AnimatedSection";
 
 interface LiquidityForecastChartProps {
   currentLiquidity: number;
@@ -52,6 +53,7 @@ export default function LiquidityForecastChart({ currentLiquidity, predictions }
   const maxVal    = Math.ceil(Math.max(cur, t1, t3, t7) + 6);
 
   return (
+    <AnimatedSection>
     <div className="dashboard-section">
       {/* Section Header */}
       <div className="section-header">
@@ -79,8 +81,14 @@ export default function LiquidityForecastChart({ currentLiquidity, predictions }
       >
         {/* KPI tiles */}
         <div className="grid grid-cols-4 gap-4 mb-8">
-          {data.map((d) => (
-            <div key={d.label} className="text-center">
+          {data.map((d, idx) => (
+            <motion.div
+              key={d.label}
+              className="text-center"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.08 * idx, duration: 0.25 }}
+            >
               <p style={{ fontSize: 11, color: "#6B7280", fontWeight: 500, marginBottom: 6 }}>{d.label}</p>
               <p style={{
                 fontSize: 26,
@@ -94,7 +102,7 @@ export default function LiquidityForecastChart({ currentLiquidity, predictions }
               <p style={{ fontSize: 10, color: d.projected ? "#3B82F6" : "#16C784", marginTop: 4 }}>
                 {d.projected ? "Projected" : "Current"}
               </p>
-            </div>
+            </motion.div>
           ))}
         </div>
 
@@ -126,6 +134,19 @@ export default function LiquidityForecastChart({ currentLiquidity, predictions }
               strokeWidth={2.5}
               fill="url(#forecastGrad)"
               dot={{ fill: "#3B82F6", r: 5, strokeWidth: 0 }}
+              isAnimationActive
+              animationDuration={900}
+              animationBegin={120}
+            />
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke="#38BDF8"
+              strokeWidth={1.4}
+              dot={{ r: 4, fill: "#38BDF8" }}
+              isAnimationActive
+              animationDuration={1000}
+              animationBegin={180}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -135,5 +156,6 @@ export default function LiquidityForecastChart({ currentLiquidity, predictions }
         </p>
       </motion.div>
     </div>
+    </AnimatedSection>
   );
 }

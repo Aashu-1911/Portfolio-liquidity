@@ -15,9 +15,11 @@ import os
 import time
 import logging
 import pickle
+import io
 import numpy as np
 import pandas as pd
-from flask import Flask, jsonify, request, g
+from datetime import datetime
+from flask import Flask, jsonify, request, g, send_file
 
 # Import new modules
 try:
@@ -27,6 +29,21 @@ try:
 except ImportError:
     ADVANCED_FEATURES = False
     logging.warning("Advanced features not available. Install dependencies.")
+
+# PDF report generation support
+try:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.graphics.shapes import Drawing, Rect, String
+    from reportlab.graphics.charts.linecharts import HorizontalLineChart
+    from reportlab.graphics.charts.piecharts import Pie
+    REPORT_FEATURES = True
+except ImportError:
+    REPORT_FEATURES = False
+    logging.warning("PDF report generation not available. Install reportlab.")
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -187,6 +204,260 @@ def _predict_score(row, model) -> float:
 def _err(msg: str, code: int = 400):
     log.warning("Client error %d: %s", code, msg)
     return jsonify({"error": msg, "status": code}), code
+
+
+def _to_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_money(value: str) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not value:
+        return 0.0
+    cleaned = str(value).replace("$", "").replace(",", "").strip()
+    return _to_float(cleaned, 0.0)
+
+
+def _parse_pct(value: str) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not value:
+        return 0.0
+    cleaned = str(value).replace("%", "").strip()
+    return _to_float(cleaned, 0.0)
+
+
+def _derive_ai_sections(ai_text: str, risk_level: str, warnings: list) -> dict:
+    text = (ai_text or "").strip()
+    if not text:
+        trend = "Portfolio liquidity is stable based on the latest computed signal."
+        risk_factors = ["No AI explanation supplied. Using model-driven summary only."]
+        recommendation = "Monitor concentration and rebalance if liquidity score declines."
+        return {
+            "summary": "This portfolio was analyzed using market microstructure features and liquidity forecasting.",
+            "market_trend": trend,
+            "risk_factors": risk_factors,
+            "recommendation": recommendation,
+        }
+
+    sentences = [s.strip() for s in text.replace("\n", " ").split(".") if s.strip()]
+    summary = sentences[0] + "." if sentences else text[:220]
+    market_trend = sentences[1] + "." if len(sentences) > 1 else "Liquidity is being monitored against near-term volatility dynamics."
+
+    risk_factors = []
+    lower = text.lower()
+    if "concentr" in lower:
+        risk_factors.append("Portfolio concentration may elevate liquidation risk.")
+    if "volatil" in lower:
+        risk_factors.append("Elevated volatility can reduce execution quality.")
+    if "spread" in lower or "illiquid" in lower:
+        risk_factors.append("Wider spreads and thinner books may increase slippage.")
+    if risk_level in ["High", "Very High", "Very High Risk"]:
+        risk_factors.append("Current portfolio risk level is elevated.")
+    if warnings:
+        risk_factors.extend(warnings[:2])
+    if not risk_factors:
+        risk_factors.append("No critical liquidity risks detected from current feature set.")
+
+    recommendation = sentences[-1] + "." if len(sentences) > 2 else "Maintain diversification and stage larger orders to reduce market impact."
+
+    return {
+        "summary": summary,
+        "market_trend": market_trend,
+        "risk_factors": risk_factors[:4],
+        "recommendation": recommendation,
+    }
+
+
+def _build_report_pdf(payload: dict) -> io.BytesIO:
+    user_name = payload.get("user_name") or "Analyst"
+    market = payload.get("market") or "US"
+    portfolio_result = payload.get("portfolio_result") or {}
+    ai = payload.get("ai_insights") or {}
+    warnings = portfolio_result.get("warnings") or payload.get("warnings") or []
+    assets = portfolio_result.get("assets") or []
+
+    liquidity_score = _to_float(portfolio_result.get("liquidity_score"), 0.0)
+    risk_level = portfolio_result.get("risk_level") or "Moderate"
+    liquidation_time = portfolio_result.get("estimated_liquidation_time") or "N/A"
+    portfolio_value = portfolio_result.get("portfolio_value") or "$0.00"
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    ai_sections = _derive_ai_sections(ai.get("ai_explanation", ""), risk_level, warnings)
+    forecast_points = [
+        max(0.0, min(1.0, _to_float(ai.get("current_liquidity"), liquidity_score))),
+        max(0.0, min(1.0, _to_float(ai.get("predicted_liquidity_tomorrow"), liquidity_score))),
+        max(0.0, min(1.0, _to_float(ai.get("predicted_liquidity_3_days"), liquidity_score))),
+        max(0.0, min(1.0, _to_float(ai.get("predicted_liquidity_7_days"), liquidity_score))),
+    ]
+
+    avg_spread = np.mean([_to_float(a.get("spread_proxy")) for a in assets]) if assets else 0.0
+    avg_amihud = np.mean([_to_float(a.get("amihud_ratio")) for a in assets]) if assets else 0.0
+    avg_volatility = np.mean([_to_float(a.get("volatility")) for a in assets]) if assets else 0.0
+    market_depth = sum([_to_float(a.get("value")) for a in assets]) * max(liquidity_score, 0.01)
+    slippage_est = _parse_pct(portfolio_result.get("price_impact", "0%")) * max(1.0 - liquidity_score, 0.15)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        rightMargin=1.5 * cm,
+        leftMargin=1.5 * cm,
+        topMargin=1.2 * cm,
+        bottomMargin=1.4 * cm,
+        title="Portfolio Liquidity Analysis Report",
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontSize=18, textColor=colors.HexColor("#111827"), spaceAfter=8)
+    section_style = ParagraphStyle("Section", parent=styles["Heading2"], fontSize=12, textColor=colors.HexColor("#0F172A"), spaceBefore=8, spaceAfter=6)
+    body_style = ParagraphStyle("Body", parent=styles["BodyText"], fontSize=9.5, leading=14, textColor=colors.HexColor("#1F2937"))
+    small_style = ParagraphStyle("Small", parent=styles["BodyText"], fontSize=8.5, leading=12, textColor=colors.HexColor("#4B5563"))
+
+    story = []
+
+    story.append(Paragraph("Portfolio Liquidity Analysis Report", title_style))
+    story.append(Paragraph("EXECUTIVE SUMMARY", section_style))
+
+    executive = [
+        ["User Name", user_name, "Market", market],
+        ["Date Generated", generated_at, "Portfolio Value", portfolio_value],
+        ["Liquidity Score", f"{liquidity_score * 100:.1f}/100", "Risk Level", risk_level],
+        ["Estimated Liquidation Time", liquidation_time, "Model Used", portfolio_result.get("model_used", "ML Model")],
+    ]
+    exec_tbl = Table(executive, colWidths=[3.2 * cm, 6.1 * cm, 3.2 * cm, 5.0 * cm])
+    exec_tbl.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.6, colors.HexColor("#CBD5E1")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")),
+        ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#F1F5F9")),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(exec_tbl)
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(f"<b>AI Summary:</b> {ai_sections['summary']}", body_style))
+
+    story.append(Paragraph("PORTFOLIO COMPOSITION TABLE", section_style))
+    comp_data = [["Symbol", "Shares", "Price", "Portfolio Value", "Portfolio Weight", "Liquidity Score"]]
+    for a in assets:
+        comp_data.append([
+            str(a.get("symbol", "-")),
+            str(a.get("qty", 0)),
+            f"${_to_float(a.get('close')):,.2f}",
+            f"${_to_float(a.get('value')):,.2f}",
+            f"{_to_float(a.get('weight')) * 100:.1f}%",
+            f"{_to_float(a.get('liquidity_score')) * 100:.1f}",
+        ])
+    comp_tbl = Table(comp_data, repeatRows=1, colWidths=[2.3 * cm, 2.0 * cm, 2.5 * cm, 3.1 * cm, 3.1 * cm, 2.8 * cm])
+    comp_tbl.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(comp_tbl)
+
+    story.append(Paragraph("ADVANCED LIQUIDITY METRICS", section_style))
+    metrics_rows = [
+        ["Bid Ask Spread", f"{avg_spread:.6f}", "Average spread proxy across holdings."],
+        ["Amihud Illiquidity Ratio", f"{avg_amihud:.6f}", "Price impact sensitivity to traded volume."],
+        ["Market Depth", f"${market_depth:,.0f}", "Estimated executable depth based on position size and score."],
+        ["Volume Volatility", f"{avg_volatility:.6f}", "Cross-asset volatility proxy for execution risk."],
+        ["Slippage Estimate", f"{slippage_est:.2f}%", "Expected slippage under current liquidity conditions."],
+    ]
+    metrics_tbl = Table([["Metric Name", "Value", "Short Explanation"]] + metrics_rows, repeatRows=1, colWidths=[4.4 * cm, 2.9 * cm, 8.5 * cm])
+    metrics_tbl.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(metrics_tbl)
+
+    story.append(Paragraph("VISUAL ANALYSIS CHARTS", section_style))
+
+    # Liquidity score bar (0-100)
+    gauge = Drawing(460, 45)
+    gauge.add(Rect(0, 18, 320, 12, strokeColor=colors.HexColor("#1E293B"), fillColor=colors.HexColor("#E2E8F0")))
+    gauge.add(Rect(0, 18, max(0, min(320, liquidity_score * 320)), 12, strokeColor=None, fillColor=colors.HexColor("#0EA5E9")))
+    gauge.add(String(0, 34, "Liquidity Score Visualization (0-100)", fontSize=8, fillColor=colors.HexColor("#334155")))
+    gauge.add(String(328, 20, f"{liquidity_score * 100:.1f}", fontSize=9, fillColor=colors.HexColor("#0F172A")))
+    story.append(gauge)
+
+    # Forecast line chart
+    line_drawing = Drawing(460, 150)
+    line = HorizontalLineChart()
+    line.x = 45
+    line.y = 30
+    line.height = 90
+    line.width = 320
+    line.data = [[round(v * 100, 2) for v in forecast_points]]
+    line.categoryAxis.categoryNames = ["Today", "Tomorrow", "3 Days", "7 Days"]
+    line.valueAxis.valueMin = 0
+    line.valueAxis.valueMax = 100
+    line.valueAxis.valueStep = 20
+    line.lines[0].strokeColor = colors.HexColor("#0284C7")
+    line.lines[0].strokeWidth = 2
+    line_drawing.add(String(0, 130, "Liquidity Forecast Chart", fontSize=8, fillColor=colors.HexColor("#334155")))
+    line_drawing.add(line)
+    story.append(line_drawing)
+
+    # Portfolio allocation donut/pie chart
+    pie_drawing = Drawing(460, 165)
+    pie = Pie()
+    pie.x = 45
+    pie.y = 10
+    pie.width = 180
+    pie.height = 130
+    pie.sideLabels = True
+    pie.data = [max(0.1, _to_float(a.get("weight"), 0.0) * 100) for a in assets[:8]] or [100]
+    pie.labels = [str(a.get("symbol")) for a in assets[:8]] or ["No Data"]
+    palette = [
+        colors.HexColor("#0EA5E9"), colors.HexColor("#06B6D4"), colors.HexColor("#14B8A6"),
+        colors.HexColor("#22C55E"), colors.HexColor("#84CC16"), colors.HexColor("#F59E0B"),
+        colors.HexColor("#F97316"), colors.HexColor("#EF4444"),
+    ]
+    for i in range(len(pie.data)):
+        pie.slices[i].fillColor = palette[i % len(palette)]
+    pie_drawing.add(String(0, 145, "Portfolio Allocation Chart", fontSize=8, fillColor=colors.HexColor("#334155")))
+    pie_drawing.add(pie)
+    story.append(pie_drawing)
+
+    story.append(Paragraph("AI LIQUIDITY INSIGHTS", section_style))
+    story.append(Paragraph(f"<b>Market Trend:</b> {ai_sections['market_trend']}", body_style))
+    risk_bullets = "<br/>".join([f"• {r}" for r in ai_sections["risk_factors"]])
+    story.append(Paragraph(f"<b>Risk Factors:</b><br/>{risk_bullets}", body_style))
+    story.append(Paragraph(f"<b>Recommendation:</b> {ai_sections['recommendation']}", body_style))
+
+    story.append(Paragraph("RISK WARNINGS", section_style))
+    if warnings:
+        for w in warnings:
+            story.append(Paragraph(f"• {w}", small_style))
+    else:
+        story.append(Paragraph("No explicit warnings reported by the current analysis run.", small_style))
+
+    def _footer(canvas, _doc):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#CBD5E1"))
+        canvas.line(1.5 * cm, 1.0 * cm, A4[0] - 1.5 * cm, 1.0 * cm)
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.HexColor("#64748B"))
+        canvas.drawString(1.5 * cm, 0.62 * cm, "Generated by LiquidityAI | Portfolio Liquidity Intelligence System")
+        canvas.drawRightString(A4[0] - 1.5 * cm, 0.62 * cm, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    buf.seek(0)
+    return buf
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -536,6 +807,46 @@ def explain():
     except Exception as e:
         log.error(f"Explanation generation failed: {e}", exc_info=True)
         return _err(f"Prediction failed: {str(e)}", 500)
+
+
+@app.route("/generate-liquidity-report", methods=["POST"])
+def generate_liquidity_report():
+    """
+    Generate downloadable portfolio liquidity report in PDF format.
+
+    Request:
+      {
+        "user_name": "Ashis",
+        "market": "US",
+        "portfolio_result": {...predict response mapped by frontend...},
+        "ai_insights": {...explain response...}
+      }
+    """
+    if not REPORT_FEATURES:
+        return _err("PDF report features unavailable. Install reportlab in backend environment.", 503)
+
+    body = request.get_json(silent=True)
+    if not body:
+        return _err("Request body must be valid JSON")
+
+    portfolio_result = body.get("portfolio_result")
+    if not portfolio_result or not isinstance(portfolio_result, dict):
+        return _err("'portfolio_result' is required and must be an object")
+
+    try:
+        pdf_bytes = _build_report_pdf(body)
+        market = str(body.get("market", "US")).upper()
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"liquidity_report_{market.lower()}_{stamp}.pdf"
+        return send_file(
+            pdf_bytes,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        log.error("Report generation failed: %s", str(e), exc_info=True)
+        return _err(f"Failed to generate report: {str(e)}", 500)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -74,13 +74,18 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export default function StockPriceChart({ symbol = "AAPL" }: StockPriceChartProps) {
+export default function StockPriceChart({ symbol }: StockPriceChartProps) {
+  const hasSymbol = !!symbol?.trim();
   const [range, setRange] = useState<TimeRange>("1M");
-  const [data, setData]   = useState(() => generateCandles(CANDLE_COUNTS["1M"], 180));
+  const [data, setData]   = useState<any[]>([]);
 
   useEffect(() => {
+    if (!hasSymbol) {
+      setData([]);
+      return;
+    }
     setData(generateCandles(CANDLE_COUNTS[range], 100 + Math.random() * 200));
-  }, [range, symbol]);
+  }, [range, symbol, hasSymbol]);
 
   const first  = data[0]?.close ?? 0;
   const last   = data[data.length - 1]?.close ?? 0;
@@ -99,6 +104,19 @@ export default function StockPriceChart({ symbol = "AAPL" }: StockPriceChartProp
       </div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ padding: 24 }}>
+        {!hasSymbol && (
+          <div className="flex flex-col items-center justify-center text-center" style={{ minHeight: 420 }}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+              style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)" }}>
+              <TrendingUp className="w-7 h-7" style={{ color: "rgba(59,130,246,0.5)" }} />
+            </div>
+            <p className="text-sm font-semibold text-gray-300 mb-2">Choose a stock to view price chart</p>
+            <p className="text-xs text-gray-600 max-w-sm">Add a stock in Watchlist Builder and run Analyze Liquidity to load chart data.</p>
+          </div>
+        )}
+
+        {hasSymbol && (
+          <>
         {/* Chart header */}
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -156,8 +174,8 @@ export default function StockPriceChart({ symbol = "AAPL" }: StockPriceChartProp
             />
             <Tooltip content={<CustomTooltip />} />
             <Line type="monotone" dataKey="ma20" stroke="#F59E0B" strokeWidth={1.5}
-              dot={false} strokeDasharray="4 2" connectNulls />
-            <Line type="monotone" dataKey="close" stroke={lineColor} strokeWidth={2.5} dot={false} />
+              dot={false} strokeDasharray="4 2" connectNulls isAnimationActive animationDuration={700} />
+            <Line type="monotone" dataKey="close" stroke={lineColor} strokeWidth={2.5} dot={false} isAnimationActive animationDuration={900} animationBegin={80} />
           </ComposedChart>
         </ResponsiveContainer>
 
@@ -194,6 +212,8 @@ export default function StockPriceChart({ symbol = "AAPL" }: StockPriceChartProp
             </div>
           ))}
         </div>
+          </>
+        )}
       </motion.div>
     </div>
   );

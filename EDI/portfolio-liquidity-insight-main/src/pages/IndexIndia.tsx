@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
 import { Activity, Loader2, Sparkles, LogOut, Globe, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -15,9 +16,14 @@ import AdvancedLiquidityMetrics from "@/components/AdvancedLiquidityMetrics";
 import MarketNewsPanel          from "@/components/MarketNewsPanel";
 import AIInsightCards           from "@/components/AIInsightCards";
 
-import { getStockSymbols, predictPortfolio, explainPortfolio } from "@/lib/dataEngine";
+import { getStockSymbols, predictPortfolio, explainPortfolio, downloadLiquidityReport } from "@/lib/dataEngine";
 import type { PortfolioAsset, PortfolioResult } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+
+type SectionTab = {
+  id: string;
+  label: string;
+};
 
 const IndexIndia = () => {
   const { user, logout } = useAuth();
@@ -27,8 +33,17 @@ const IndexIndia = () => {
   const [result, setResult]             = useState<PortfolioResult | null>(null);
   const [aiLoading, setAiLoading]       = useState(false);
   const [aiPredictions, setAiPredictions] = useState<any>(null);
+  const [reportLoading, setReportLoading] = useState(false);
   const [currentPortfolio, setCurrentPortfolio] = useState<PortfolioAsset[]>([]);
-  const [selectedSymbol, setSelectedSymbol]     = useState("INFY.NS");
+  const [selectedSymbol, setSelectedSymbol]     = useState("");
+  const [showSectionTabs, setShowSectionTabs]   = useState(false);
+
+  const sectionTabs: SectionTab[] = [
+    { id: "portfolio-liquidity", label: "Portfolio Liquidity" },
+    { id: "ai-insights", label: "AI Insights" },
+    { id: "analytics", label: "Analytics" },
+    { id: "assets-breakdown", label: "Assests Breakdown" },
+  ];
 
   useEffect(() => {
     getStockSymbols("INDIA")
@@ -39,6 +54,8 @@ const IndexIndia = () => {
 
   const handleSubmit = async (portfolio: PortfolioAsset[]) => {
     setLoading(true);
+    setShowSectionTabs(true);
+    setAiPredictions(null);
     setCurrentPortfolio(portfolio);
     if (portfolio.length > 0) setSelectedSymbol(portfolio[0].symbol);
     try {
@@ -61,6 +78,54 @@ const IndexIndia = () => {
       setAiLoading(false);
     }
   };
+
+  const handleDownloadReport = async () => {
+    if (!result) return;
+    setReportLoading(true);
+    try {
+      await downloadLiquidityReport({
+        user_name: user?.name || user?.email || "Analyst",
+        market: "INDIA",
+        portfolio_result: result,
+        ai_insights: aiPredictions || undefined,
+      });
+    } catch (error) {
+      console.error("Report download failed:", error);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const scrollToSection = (sectionId: string) => {
+    if (sectionId === "dashboard-top") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const element = document.getElementById(sectionId);
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const loadingSkeleton = (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="glass-card p-5 animate-pulse">
+            <div className="h-3 w-28 bg-slate-700/40 rounded mb-4" />
+            <div className="h-7 w-20 bg-slate-700/40 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="glass-card h-56 animate-pulse bg-slate-800/45" />
+        <div className="glass-card h-56 animate-pulse bg-slate-800/45" />
+        <div className="glass-card h-56 animate-pulse bg-slate-800/45" />
+      </div>
+      <div className="glass-card h-72 animate-pulse bg-slate-800/45" />
+    </div>
+  );
 
   if (dataLoading) {
     return (
@@ -92,7 +157,7 @@ const IndexIndia = () => {
       <header className="sticky top-0 z-40"
         style={{ background: "rgba(11,15,25,0.95)", borderBottom: "1px solid #1F2937", backdropFilter: "blur(20px)" }}>
         <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-4">
-          <div className="flex items-center gap-3">
+          <Link to="/india" className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{ background: "linear-gradient(135deg,#F59E0B,#EA3943)" }}>
               <Activity className="w-4 h-4 text-black" />
@@ -104,13 +169,25 @@ const IndexIndia = () => {
               </h1>
               <p className="text-[10px] text-gray-600 font-mono">NIFTY 50 · {symbols.length} stocks · ML-powered</p>
             </div>
-          </div>
+          </Link>
 
           <div className="hidden lg:flex items-center gap-1 ml-6">
-            {["Dashboard", "Portfolio", "Analytics"].map((tab, i) => (
-              <button key={tab} className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
-                style={{ color: i === 0 ? "#F59E0B" : "#6b7280", background: i === 0 ? "rgba(245,158,11,0.1)" : "transparent" }}>
-                {tab}
+            <button
+              className="nav-tab active text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+              style={{ color: "#F59E0B", background: "rgba(245,158,11,0.1)" }}
+              onClick={() => scrollToSection("dashboard-top")}
+            >
+              Dashboard
+            </button>
+
+            {showSectionTabs && sectionTabs.map((tab) => (
+              <button
+                key={tab.id}
+                className="nav-tab text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+                style={{ color: "#6b7280", background: "transparent" }}
+                onClick={() => scrollToSection(tab.id)}
+              >
+                {tab.label}
               </button>
             ))}
           </div>
@@ -139,7 +216,7 @@ const IndexIndia = () => {
       </header>
 
       {/* ─── MAIN ───────────────────────────────────────────── */}
-      <main className="max-w-[1600px] mx-auto px-4 lg:px-6 py-6 space-y-6">
+      <main id="dashboard-top" className="max-w-[1600px] mx-auto px-4 lg:px-6 py-6 space-y-6">
 
         {/* Zone 1: Watchlist | Price Chart | Liquidity Score */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -178,7 +255,11 @@ const IndexIndia = () => {
 
               {result && !loading && (
                 <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <ResultsDisplay result={result} />
+                  <ResultsDisplay
+                    result={result}
+                    onDownloadReport={handleDownloadReport}
+                    reportLoading={reportLoading}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -186,14 +267,19 @@ const IndexIndia = () => {
         </div>
 
         {/* Post-analysis zones */}
+        {loading && !result && loadingSkeleton}
+
         <AnimatePresence>
           {result && (
             <motion.div key="analysis" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="space-y-6">
 
-              <AdvancedLiquidityMetrics assets={result.assets} />
+              <div id="portfolio-liquidity" className="scroll-mt-24">
+                <AdvancedLiquidityMetrics assets={result.assets} />
+              </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div id="ai-insights" className="scroll-mt-24" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
                   {aiPredictions ? (
                     <FuturePredictions
@@ -221,6 +307,19 @@ const IndexIndia = () => {
                 </div>
 
                 <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">AI Insights</p>
+                    <Button
+                      onClick={handleAiExplain}
+                      disabled={aiLoading || !currentPortfolio.length}
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2.5 text-[11px]"
+                    >
+                      {aiLoading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Sparkles className="w-3 h-3 mr-1" />}
+                      Refresh
+                    </Button>
+                  </div>
                   {aiPredictions ? (
                     <AIInsightCards
                       aiExplanation={aiPredictions.ai_explanation}
@@ -234,9 +333,9 @@ const IndexIndia = () => {
                   )}
                 </div>
 
-                <div><MarketNewsPanel /></div>
               </div>
 
+              <div id="analytics" className="scroll-mt-24" />
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div className="lg:col-span-4">
                   <LiquidityHeatmap assets={result.assets} />
@@ -246,7 +345,10 @@ const IndexIndia = () => {
                 </div>
               </div>
 
-              <AssetTable assets={result.assets} />
+              <div id="assets-breakdown" className="scroll-mt-24">
+                <AssetTable assets={result.assets} />
+              </div>
+
             </motion.div>
           )}
         </AnimatePresence>

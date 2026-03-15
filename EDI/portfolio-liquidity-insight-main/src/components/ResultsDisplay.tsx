@@ -1,13 +1,15 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Clock, TrendingDown, AlertTriangle, DollarSign, Info } from "lucide-react";
+import { Shield, Clock, TrendingDown, AlertTriangle, DollarSign, Info, Download, Loader2 } from "lucide-react";
 import type { PortfolioResult } from "@/lib/types";
 import LiquidityRiskBar from "./LiquidityRiskBar";
 
 interface ResultsDisplayProps {
   result: PortfolioResult;
+  onDownloadReport?: () => void;
+  reportLoading?: boolean;
 }
 
-export default function ResultsDisplay({ result }: ResultsDisplayProps) {
+export default function ResultsDisplay({ result, onDownloadReport, reportLoading = false }: ResultsDisplayProps) {
   const riskInfo = {
     Low:      { color: "#16C784", bg: "rgba(22,199,132,0.07)", border: "rgba(22,199,132,0.2)" },
     Moderate: { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.2)"  },
@@ -30,6 +32,28 @@ export default function ResultsDisplay({ result }: ResultsDisplayProps) {
         <LiquidityRiskBar score={result.liquidity_score} modelUsed={result.model_used} />
       </motion.div>
 
+      {/* Download report */}
+      {onDownloadReport && (
+        <motion.button
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          onClick={onDownloadReport}
+          disabled={reportLoading}
+          className="w-full rounded-xl text-sm font-semibold flex items-center justify-center gap-2 py-2.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{
+            background: "linear-gradient(135deg, #0EA5E9, #14B8A6)",
+            color: "#020617",
+            border: "1px solid rgba(125, 211, 252, 0.35)",
+            boxShadow: "0 10px 20px rgba(14, 165, 233, 0.2)",
+          }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+        >
+          {reportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {reportLoading ? "Generating Report..." : "Download Liquidity Report (PDF)"}
+        </motion.button>
+      )}
+
       {/* Metric cards */}
       <div className="grid grid-cols-2 gap-3">
         {metrics.map((m, i) => (
@@ -38,6 +62,7 @@ export default function ResultsDisplay({ result }: ResultsDisplayProps) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 + i * 0.06 }}
+            whileHover={{ y: -4, boxShadow: "0 10px 24px rgba(15,23,42,0.34)" }}
             className="rounded-xl"
             style={{ padding: "16px 18px", background: m.bg, border: `1px solid ${m.border}` }}
           >

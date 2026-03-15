@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Newspaper, ExternalLink, Clock } from "lucide-react";
+import AnimatedSection from "@/components/ui/AnimatedSection";
 
 interface NewsItem {
   id: number;
@@ -42,6 +43,7 @@ export default function MarketNewsPanel() {
   ];
 
   return (
+    <AnimatedSection>
     <div className="dashboard-section">
       {/* Section Header */}
       <div className="section-header">
@@ -75,6 +77,7 @@ export default function MarketNewsPanel() {
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.035 }}
+            whileHover={{ y: -4 }}
             className="flex items-start gap-4 cursor-pointer group"
             style={{
               padding: "14px 20px",
@@ -105,5 +108,6 @@ export default function MarketNewsPanel() {
         ))}
       </div>
     </div>
+    </AnimatedSection>
   );
 }

@@ -10,11 +10,7 @@ interface PortfolioInputProps {
 }
 
 export default function PortfolioInput({ symbols, onSubmit, loading }: PortfolioInputProps) {
-  const [portfolio, setPortfolio] = useState<PortfolioAsset[]>([
-    { symbol: "AAPL", qty: 50 },
-    { symbol: "MSFT", qty: 30 },
-    { symbol: "GOOG", qty: 10 },
-  ]);
+  const [portfolio, setPortfolio] = useState<PortfolioAsset[]>([]);
   const [search, setSearch]           = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -178,10 +174,12 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
 
       {/* Analyze button */}
       <div className="p-4" style={{ borderTop: "1px solid #1F2937" }}>
-        <button
+        <motion.button
           onClick={() => onSubmit(portfolio)}
           disabled={portfolio.length === 0 || loading}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          whileHover={portfolio.length > 0 && !loading ? { scale: 1.03 } : {}}
+          whileTap={portfolio.length > 0 && !loading ? { scale: 0.97 } : {}}
           style={{
             background: loading || portfolio.length === 0
               ? "#1F2937"
@@ -201,7 +199,7 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
               Analyze Liquidity
             </>
           )}
-        </button>
+        </motion.button>
       </div>
     </div>
   );

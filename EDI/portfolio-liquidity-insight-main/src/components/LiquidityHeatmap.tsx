@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import type { AssetResult } from "@/lib/types";
+import AnimatedSection from "@/components/ui/AnimatedSection";
 
 interface LiquidityHeatmapProps {
   assets: AssetResult[];
@@ -17,6 +18,7 @@ export default function LiquidityHeatmap({ assets }: LiquidityHeatmapProps) {
   };
 
   return (
+    <AnimatedSection>
     <div className="dashboard-section">
       {/* Section Header */}
       <div className="section-header">
@@ -58,7 +60,7 @@ export default function LiquidityHeatmap({ assets }: LiquidityHeatmapProps) {
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: w }}
-                    transition={{ duration: 0.9, delay: i * 0.06, ease: [0.4, 0, 0.2, 1] }}
+                    transition={{ duration: 0.7, delay: i * 0.06, ease: [0.4, 0, 0.2, 1] }}
                     className="h-full rounded-full flex items-center px-2.5"
                     style={{
                       background: `linear-gradient(90deg, ${c.bar}bb, ${c.bar})`,
@@ -115,5 +117,6 @@ export default function LiquidityHeatmap({ assets }: LiquidityHeatmapProps) {
         </div>
       </div>
     </div>
+    </AnimatedSection>
   );
 }

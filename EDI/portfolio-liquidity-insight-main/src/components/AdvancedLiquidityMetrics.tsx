@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Info } from "lucide-react";
 import type { AssetResult } from "@/lib/types";
+import AnimatedSection from "@/components/ui/AnimatedSection";
 
 interface AdvancedLiquidityMetricsProps {
   assets: AssetResult[];
@@ -74,6 +75,7 @@ export default function AdvancedLiquidityMetrics({ assets }: AdvancedLiquidityMe
   ];
 
   return (
+    <AnimatedSection>
     <div className="dashboard-section">
       {/* Section Header */}
       <div className="section-header">
@@ -90,6 +92,7 @@ export default function AdvancedLiquidityMetrics({ assets }: AdvancedLiquidityMe
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07 }}
+            whileHover={{ y: -4 }}
             onMouseEnter={() => setHoveredCard(m.name)}
             onMouseLeave={() => setHoveredCard(null)}
             className="relative rounded-xl cursor-default"
@@ -136,5 +139,6 @@ export default function AdvancedLiquidityMetrics({ assets }: AdvancedLiquidityMe
         ))}
       </div>
     </div>
+    </AnimatedSection>
   );
 }

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { TrendingUp, AlertTriangle, Lightbulb, Brain } from "lucide-react";
+import AnimatedSection from "@/components/ui/AnimatedSection";
 
 interface AIInsightCardsProps {
   aiExplanation?: string;
@@ -59,6 +60,7 @@ export default function AIInsightCards({ aiExplanation, riskLevel = "Moderate", 
   ];
 
   return (
+    <AnimatedSection>
     <div className="dashboard-section">
       {/* Section Header */}
       <div className="section-header">
@@ -73,6 +75,7 @@ export default function AIInsightCards({ aiExplanation, riskLevel = "Moderate", 
             initial={{ opacity: 0, x: -14 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: card.delay, duration: 0.4 }}
+            whileHover={{ y: -4 }}
             className={`rounded-xl ${card.variant}`}
             style={{ padding: "18px 20px" }}
           >
@@ -118,5 +121,6 @@ export default function AIInsightCards({ aiExplanation, riskLevel = "Moderate", 
         </motion.div>
       )}
     </div>
+    </AnimatedSection>
   );
 }

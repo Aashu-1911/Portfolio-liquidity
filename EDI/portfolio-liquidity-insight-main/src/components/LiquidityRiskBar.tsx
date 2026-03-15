@@ -84,7 +84,7 @@ export default function LiquidityRiskBar({ score, modelUsed }: LiquidityRiskBarP
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
-          transition={{ duration: 1.2, ease: [0.4, 0, 0.2, 1] }}
+          transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
           className="h-full rounded-full relative"
           style={{
             background: "linear-gradient(90deg,#EA3943 0%,#F59E0B 40%,#16C784 100%)",

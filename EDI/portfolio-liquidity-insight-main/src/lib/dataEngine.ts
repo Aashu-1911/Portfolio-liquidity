@@ -115,6 +115,55 @@ export async function explainSymbol(
   return await res.json();
 }
 
+// ============================================================
+// POST /generate-liquidity-report  →  PDF report download
+// ============================================================
+export async function downloadLiquidityReport(payload: {
+  user_name: string;
+  market: string;
+  portfolio_result: PortfolioResult;
+  ai_insights?: any;
+}): Promise<void> {
+  let res = await fetch(`${API_BASE}/generate-liquidity-report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  // Some deployments may have strict trailing-slash routing.
+  if (res.status === 404 || res.status === 405) {
+    const retry = await fetch(`${API_BASE}/generate-liquidity-report/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (retry.ok) {
+      res = retry;
+    }
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (res.status === 405) {
+      throw new Error("Report endpoint not available on the active backend. Restart Flask backend to load /generate-liquidity-report.");
+    }
+    throw new Error((err as any).error ?? `HTTP ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  const fileName = extractFileName(res.headers.get("Content-Disposition"))
+    || `liquidity_report_${payload.market.toLowerCase()}.pdf`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // "Moderate Risk" → "Moderate",  "Low Risk" → "Low",  "High Risk" → "High"
 function stripRisk(label: string): string {
   return (label ?? "").replace(/\s*Risk$/i, "").trim();
@@ -125,4 +174,10 @@ function parseWeight(w: string | number): number {
   if (typeof w === "number") return w > 1 ? w / 100 : w;
   const n = parseFloat(w);
   return isNaN(n) ? 0 : n / 100;
+}
+
+function extractFileName(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+  const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
+  return match?.[1] ?? null;
 }

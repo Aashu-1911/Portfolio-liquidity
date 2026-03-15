@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
 import {
   Activity, Loader2, Sparkles, LogOut, Globe, ChevronRight
 } from "lucide-react";
@@ -17,9 +18,14 @@ import AdvancedLiquidityMetrics from "@/components/AdvancedLiquidityMetrics";
 import MarketNewsPanel          from "@/components/MarketNewsPanel";
 import AIInsightCards           from "@/components/AIInsightCards";
 
-import { getStockSymbols, predictPortfolio, explainPortfolio } from "@/lib/dataEngine";
+import { getStockSymbols, predictPortfolio, explainPortfolio, downloadLiquidityReport } from "@/lib/dataEngine";
 import type { PortfolioAsset, PortfolioResult } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
+
+type SectionTab = {
+  id: string;
+  label: string;
+};
 
 const Index = () => {
   const { user, logout } = useAuth();
@@ -29,8 +35,17 @@ const Index = () => {
   const [result, setResult]             = useState<PortfolioResult | null>(null);
   const [aiLoading, setAiLoading]       = useState(false);
   const [aiPredictions, setAiPredictions] = useState<any>(null);
+  const [reportLoading, setReportLoading] = useState(false);
   const [currentPortfolio, setCurrentPortfolio] = useState<PortfolioAsset[]>([]);
-  const [selectedSymbol, setSelectedSymbol]     = useState("AAPL");
+  const [selectedSymbol, setSelectedSymbol]     = useState("");
+  const [showSectionTabs, setShowSectionTabs]   = useState(false);
+
+  const sectionTabs: SectionTab[] = [
+    { id: "portfolio-liquidity", label: "Portfolio Liquidity" },
+    { id: "ai-insights", label: "AI Insights" },
+    { id: "analytics", label: "Analytics" },
+    { id: "assets-breakdown", label: "Assests Breakdown" },
+  ];
 
   useEffect(() => {
     getStockSymbols("US")
@@ -41,6 +56,8 @@ const Index = () => {
 
   const handleSubmit = async (portfolio: PortfolioAsset[]) => {
     setLoading(true);
+    setShowSectionTabs(true);
+    setAiPredictions(null);
     setCurrentPortfolio(portfolio);
     if (portfolio.length > 0) setSelectedSymbol(portfolio[0].symbol);
     try {
@@ -63,6 +80,54 @@ const Index = () => {
       setAiLoading(false);
     }
   };
+
+  const handleDownloadReport = async () => {
+    if (!result) return;
+    setReportLoading(true);
+    try {
+      await downloadLiquidityReport({
+        user_name: user?.name || user?.email || "Analyst",
+        market: "US",
+        portfolio_result: result,
+        ai_insights: aiPredictions || undefined,
+      });
+    } catch (error) {
+      console.error("Report download failed:", error);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const scrollToSection = (sectionId: string) => {
+    if (sectionId === "dashboard-top") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const element = document.getElementById(sectionId);
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const loadingSkeleton = (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="glass-card p-5 animate-pulse">
+            <div className="h-3 w-28 bg-slate-700/40 rounded mb-4" />
+            <div className="h-7 w-20 bg-slate-700/40 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="glass-card h-56 animate-pulse bg-slate-800/45" />
+        <div className="glass-card h-56 animate-pulse bg-slate-800/45" />
+        <div className="glass-card h-56 animate-pulse bg-slate-800/45" />
+      </div>
+      <div className="glass-card h-72 animate-pulse bg-slate-800/45" />
+    </div>
+  );
 
   if (dataLoading) {
     return (
@@ -96,7 +161,7 @@ const Index = () => {
         style={{ background: "rgba(11,15,25,0.95)", borderBottom: "1px solid #1F2937", backdropFilter: "blur(20px)" }}
       >
         <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-4">
-          <div className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{ background: "linear-gradient(135deg,#16C784,#3B82F6)" }}>
               <Activity className="w-4 h-4 text-black" />
@@ -108,25 +173,41 @@ const Index = () => {
               </h1>
               <p className="text-[10px] text-gray-600 font-mono">S&P 500 · {symbols.length} stocks · ML-powered</p>
             </div>
-          </div>
+          </Link>
 
           <div className="hidden lg:flex items-center gap-1 ml-6">
-            {["Dashboard", "Portfolio", "Analytics"].map((tab, i) => (
-              <button key={tab}
-                className="rounded-lg font-semibold transition-all"
+            <button
+              className="nav-tab active rounded-lg font-semibold transition-all"
+              style={{
+                fontSize: 12,
+                padding: "6px 14px",
+                fontWeight: 600,
+                color: "#E5E7EB",
+                background: "#1F2937",
+                border: "1px solid #374151",
+                transition: "all 0.15s ease",
+              }}
+              onClick={() => scrollToSection("dashboard-top")}
+            >
+              Dashboard
+            </button>
+
+            {showSectionTabs && sectionTabs.map((tab) => (
+              <button
+                key={tab.id}
+                className="nav-tab rounded-lg font-semibold transition-all"
                 style={{
                   fontSize: 12,
                   padding: "6px 14px",
-                  fontWeight: i === 0 ? 600 : 500,
-                  color: i === 0 ? "#E5E7EB" : "#6B7280",
-                  background: i === 0 ? "#1F2937" : "transparent",
-                  border: i === 0 ? "1px solid #374151" : "1px solid transparent",
+                  fontWeight: 500,
+                  color: "#6B7280",
+                  background: "transparent",
+                  border: "1px solid transparent",
                   transition: "all 0.15s ease",
                 }}
-                onMouseEnter={(e) => { if (i !== 0) { e.currentTarget.style.color = "#9CA3AF"; e.currentTarget.style.background = "rgba(31,41,55,0.5)"; } }}
-                onMouseLeave={(e) => { if (i !== 0) { e.currentTarget.style.color = "#6B7280"; e.currentTarget.style.background = "transparent"; } }}
+                onClick={() => scrollToSection(tab.id)}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -155,7 +236,7 @@ const Index = () => {
       </header>
 
       {/* ─── MAIN ───────────────────────────────────────────── */}
-      <main className="max-w-[1600px] mx-auto px-4 lg:px-6 py-6 space-y-6">
+      <main id="dashboard-top" className="max-w-[1600px] mx-auto px-4 lg:px-6 py-6 space-y-6">
 
         {/* ── PORTFOLIO ANALYSIS ─────────────────────────── */}
         <p className="section-label">Portfolio Analysis</p>
@@ -195,7 +276,11 @@ const Index = () => {
 
               {result && !loading && (
                 <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <ResultsDisplay result={result} />
+                  <ResultsDisplay
+                    result={result}
+                    onDownloadReport={handleDownloadReport}
+                    reportLoading={reportLoading}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -203,17 +288,23 @@ const Index = () => {
         </div>
 
         {/* ── POST-ANALYSIS ZONES ───────────────────────── */}
+        {loading && !result && loadingSkeleton}
+
         <AnimatePresence>
           {result && (
             <motion.div key="analysis" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className="space-y-10">
 
               {/* ── LIQUIDITY ANALYTICS ── */}
-              <AdvancedLiquidityMetrics assets={result.assets} />
+              <div id="portfolio-liquidity" className="scroll-mt-24">
+                <AdvancedLiquidityMetrics assets={result.assets} />
+              </div>
 
               {/* ── FORECAST & INSIGHTS ── */}
-              <p className="section-label">Forecast &amp; Insights</p>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div id="ai-insights" className="scroll-mt-24">
+                <p className="section-label">Forecast &amp; Insights</p>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Forecast */}
                 <div>
                   {aiPredictions ? (
@@ -243,6 +334,19 @@ const Index = () => {
 
                 {/* AI Insights */}
                 <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">AI Insights</p>
+                    <Button
+                      onClick={handleAiExplain}
+                      disabled={aiLoading || !currentPortfolio.length}
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2.5 text-[11px]"
+                    >
+                      {aiLoading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Sparkles className="w-3 h-3 mr-1" />}
+                      Refresh
+                    </Button>
+                  </div>
                   {aiPredictions ? (
                     <AIInsightCards
                       aiExplanation={aiPredictions.ai_explanation}
@@ -256,14 +360,12 @@ const Index = () => {
                   )}
                 </div>
 
-                {/* News */}
-                <div>
-                  <MarketNewsPanel />
-                </div>
               </div>
 
               {/* ── PORTFOLIO BREAKDOWN ── */}
-              <p className="section-label">Portfolio Breakdown</p>
+              <div id="analytics" className="scroll-mt-24">
+                <p className="section-label">Portfolio Breakdown</p>
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-4">
                   <LiquidityHeatmap assets={result.assets} />
@@ -274,7 +376,10 @@ const Index = () => {
               </div>
 
               {/* Zone 5: Asset Table */}
-              <AssetTable assets={result.assets} />
+              <div id="assets-breakdown" className="scroll-mt-24">
+                <AssetTable assets={result.assets} />
+              </div>
+
             </motion.div>
           )}
         </AnimatePresence>
