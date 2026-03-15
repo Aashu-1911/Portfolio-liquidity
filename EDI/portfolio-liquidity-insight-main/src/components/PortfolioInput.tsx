@@ -39,26 +39,52 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
   };
 
   return (
-    <div className="glass-card glow-border flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
+    <div
+      className="relative flex flex-col overflow-hidden rounded-2xl"
+      style={{
+        minHeight: 0,
+        background: "linear-gradient(165deg, #14233D 0%, #0E1B33 45%, #0B1528 100%)",
+        border: "1px solid rgba(59,130,246,0.28)",
+        boxShadow: "0 16px 44px rgba(2,6,23,0.55), 0 0 0 1px rgba(59,130,246,0.08), inset 0 1px 0 rgba(147,197,253,0.15)",
+      }}
+    >
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(400px 180px at 0% 0%, rgba(59,130,246,0.18), transparent 55%), radial-gradient(240px 140px at 100% 100%, rgba(22,199,132,0.12), transparent 65%)",
+        }}
+      />
+
       {/* Header */}
       <div
-        className="px-5 py-4 flex items-center gap-3"
-        style={{ borderBottom: "1px solid #1F2937" }}
+        className="relative px-5 py-4 flex items-center gap-3"
+        style={{ borderBottom: "1px solid rgba(59,130,246,0.24)", background: "linear-gradient(180deg, rgba(59,130,246,0.12), rgba(59,130,246,0.03))" }}
       >
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: "rgba(59,130,246,0.12)" }}
+          style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.35), rgba(22,199,132,0.22))", border: "1px solid rgba(147,197,253,0.28)" }}
         >
           <TrendingUp className="w-4 h-4 text-[#3B82F6]" />
         </div>
-        <div>
+        <div className="relative">
           <h2 className="text-sm font-semibold text-gray-200">Watchlist Builder</h2>
           <p className="text-[11px] text-gray-500">{portfolio.length} position{portfolio.length !== 1 ? "s" : ""} added</p>
         </div>
+        <span
+          className="ml-auto rounded-full px-2.5 py-1 text-[10px] font-semibold"
+          style={{
+            color: "#7DD3FC",
+            border: "1px solid rgba(125,211,252,0.35)",
+            background: "rgba(14,116,144,0.18)",
+            letterSpacing: "0.04em",
+          }}
+        >
+          LIVE BUILDER
+        </span>
       </div>
 
       {/* Search */}
-      <div className="px-4 py-3" style={{ borderBottom: "1px solid #1F2937" }}>
+      <div className="relative px-4 py-3" style={{ borderBottom: "1px solid rgba(51,65,85,0.75)" }}>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600" />
           <input
@@ -100,8 +126,8 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
           className="grid px-4 py-2"
           style={{
             gridTemplateColumns: "1fr 80px 60px 28px",
-            borderBottom: "1px solid #1F2937",
-            background: "#0d1520",
+            borderBottom: "1px solid rgba(51,65,85,0.75)",
+            background: "rgba(15,23,42,0.55)",
           }}
         >
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Symbol</span>
@@ -173,7 +199,7 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
       </div>
 
       {/* Analyze button */}
-      <div className="p-4" style={{ borderTop: "1px solid #1F2937" }}>
+      <div className="relative p-4" style={{ borderTop: "1px solid rgba(51,65,85,0.75)" }}>
         <motion.button
           onClick={() => onSubmit(portfolio)}
           disabled={portfolio.length === 0 || loading}
