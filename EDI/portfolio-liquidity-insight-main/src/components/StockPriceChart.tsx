@@ -1,217 +1,220 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid, Cell,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  ComposedChart,
+  Bar,
 } from "recharts";
-import { TrendingUp, TrendingDown } from "lucide-react";
-
-interface StockPriceChartProps {
-  symbol?: string;
-}
+import { Loader2, TrendingUp, TrendingDown } from "lucide-react";
+import { getPriceHistory } from "@/lib/dataEngine";
 
 type TimeRange = "1D" | "5D" | "1M" | "3M" | "1Y";
 
-function generateCandles(n: number, startPrice: number) {
-  const data: any[] = [];
-  let price = startPrice;
-  const now = Date.now();
-  const msPerCandle = n <= 1 ? 3600000 : n <= 5 ? 3600000 * 4 : 86400000;
-
-  for (let i = 0; i < n; i++) {
-    const change = (Math.random() - 0.48) * price * 0.02;
-    const open   = price;
-    const close  = Math.max(1, price + change);
-    const high   = Math.max(open, close) * (1 + Math.random() * 0.008);
-    const low    = Math.min(open, close) * (1 - Math.random() * 0.008);
-    const volume = Math.floor(100000 + Math.random() * 900000);
-    const ma20   = i >= 5
-      ? data.slice(Math.max(0, i - 20), i).reduce((s, d) => s + d.close, 0) / Math.min(20, i)
-      : null;
-
-    const ts = new Date(now - (n - i) * msPerCandle);
-    const label = n <= 1
-      ? ts.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-      : n <= 5
-      ? ts.toLocaleDateString("en-US", { weekday: "short", hour: "2-digit" })
-      : ts.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-    data.push({ label, open: +open.toFixed(2), close: +close.toFixed(2), high: +high.toFixed(2), low: +low.toFixed(2), volume, ma20 });
-    price = close;
-  }
-  return data;
+interface StockPriceChartProps {
+  symbol?: string;
+  symbols?: string[];
+  market?: string;
 }
 
-const CANDLE_COUNTS: Record<TimeRange, number> = {
-  "1D": 24, "5D": 30, "1M": 30, "3M": 60, "1Y": 60,
-};
+const COLORS = ["#16C784", "#3B82F6", "#F59E0B", "#EA3943", "#A78BFA", "#22D3EE"];
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload;
-  const bullish = d.close >= d.open;
-  return (
-    <div className="rounded-xl p-3.5" style={{ background: "#1a2235", border: "1px solid #1F2937", minWidth: 148 }}>
-      <p style={{ fontSize: 11, color: "#6B7280", marginBottom: 10, fontWeight: 500 }}>{label}</p>
-      {[
-        ["O", d.open, "#9CA3AF"],
-        ["H", d.high, "#16C784"],
-        ["L", d.low,  "#EA3943"],
-        ["C", d.close, bullish ? "#16C784" : "#EA3943"],
-      ].map(([k, v, c]) => (
-        <div key={k as string} className="flex justify-between gap-5 mb-1">
-          <span style={{ fontSize: 11, color: "#6B7280" }}>{k}</span>
-          <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, color: c as string }}>${(v as number).toFixed(2)}</span>
-        </div>
-      ))}
-      <div className="flex justify-between gap-5 mt-2 pt-2" style={{ borderTop: "1px solid #1F2937" }}>
-        <span style={{ fontSize: 11, color: "#6B7280" }}>Vol</span>
-        <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: "#9CA3AF" }}>
-          {((d.volume as number) / 1000).toFixed(0)}K
-        </span>
-      </div>
-    </div>
-  );
-};
+function fmtCurrency(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
 
-export default function StockPriceChart({ symbol }: StockPriceChartProps) {
-  const hasSymbol = !!symbol?.trim();
+export default function StockPriceChart({ symbol, symbols = [], market = "US" }: StockPriceChartProps) {
   const [range, setRange] = useState<TimeRange>("1M");
-  const [data, setData]   = useState<any[]>([]);
+  const [historyMap, setHistoryMap] = useState<Record<string, any[]>>({});
+  const [loading, setLoading] = useState(false);
+
+  const cleanedSymbols = useMemo(
+    () => Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))),
+    [symbols]
+  );
+
+  const singleMode = !!symbol?.trim();
+  const chartSymbols = useMemo(() => {
+    if (singleMode) return [symbol!.trim().toUpperCase()];
+    return cleanedSymbols;
+  }, [singleMode, symbol, cleanedSymbols]);
 
   useEffect(() => {
-    if (!hasSymbol) {
-      setData([]);
-      return;
-    }
-    setData(generateCandles(CANDLE_COUNTS[range], 100 + Math.random() * 200));
-  }, [range, symbol, hasSymbol]);
+    let cancelled = false;
 
-  const first  = data[0]?.close ?? 0;
-  const last   = data[data.length - 1]?.close ?? 0;
-  const change = last - first;
-  const pct    = first > 0 ? (change / first) * 100 : 0;
-  const bull   = change >= 0;
-  const lineColor = bull ? "#16C784" : "#EA3943";
+    async function load() {
+      if (!chartSymbols.length) {
+        setHistoryMap({});
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const data = await getPriceHistory(chartSymbols, range, market);
+        if (!cancelled) setHistoryMap(data);
+      } catch (err) {
+        if (!cancelled) setHistoryMap({});
+        console.error("getPriceHistory failed", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [range, market, chartSymbols]);
+
+  const singleSeries = singleMode ? historyMap[chartSymbols[0]] ?? [] : [];
+
+  const compareSeries = useMemo(() => {
+    if (singleMode || !chartSymbols.length) return [] as any[];
+
+    const byLabel = new Map<string, any>();
+
+    chartSymbols.forEach((sym) => {
+      const points = historyMap[sym] ?? [];
+      if (!points.length) return;
+      const first = points[0]?.close || 1;
+
+      points.forEach((p: any) => {
+        const key = p.label || p.date || String(p.ts);
+        if (!byLabel.has(key)) byLabel.set(key, { label: key });
+        const row = byLabel.get(key);
+        row[sym] = Number(((p.close / first - 1) * 100).toFixed(3));
+      });
+    });
+
+    return Array.from(byLabel.values());
+  }, [singleMode, chartSymbols, historyMap]);
+
+  const current = singleSeries[singleSeries.length - 1]?.close ?? 0;
+  const first = singleSeries[0]?.close ?? 0;
+  const change = current - first;
+  const pct = first > 0 ? (change / first) * 100 : 0;
+  const up = change >= 0;
+
   const ranges: TimeRange[] = ["1D", "5D", "1M", "3M", "1Y"];
 
   return (
     <div className="dashboard-section">
-      {/* Section Header */}
       <div className="section-header">
         <TrendingUp className="w-5 h-5 flex-shrink-0" style={{ color: "#3B82F6" }} />
         <span className="section-title">Price Chart</span>
       </div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ padding: 24 }}>
-        {!hasSymbol && (
+        {!chartSymbols.length && (
           <div className="flex flex-col items-center justify-center text-center" style={{ minHeight: 420 }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-              style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)" }}>
-              <TrendingUp className="w-7 h-7" style={{ color: "rgba(59,130,246,0.5)" }} />
-            </div>
-            <p className="text-sm font-semibold text-gray-300 mb-2">Choose a stock to view price chart</p>
-            <p className="text-xs text-gray-600 max-w-sm">Add a stock in Watchlist Builder and run Analyze Liquidity to load chart data.</p>
+            <p className="text-sm font-semibold text-gray-300 mb-2">Add stocks to view chart</p>
+            <p className="text-xs text-gray-600 max-w-sm">Use Watchlist Builder, then click a stock for single view or Compare All mode for portfolio comparison.</p>
           </div>
         )}
 
-        {hasSymbol && (
+        {!!chartSymbols.length && (
           <>
-        {/* Chart header */}
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <p style={{ fontSize: 11, color: "#6B7280", fontFamily: "'JetBrains Mono',monospace", marginBottom: 4 }}>
-              {symbol} · {range}
-            </p>
-            <p style={{ fontSize: 28, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", color: "#F9FAFB", lineHeight: 1 }}>
-              ${last.toFixed(2)}
-            </p>
-            <div className="flex items-center gap-1.5 mt-1.5">
-              {bull
-                ? <TrendingUp className="w-3.5 h-3.5" style={{ color: lineColor }} />
-                : <TrendingDown className="w-3.5 h-3.5" style={{ color: lineColor }} />}
-              <span style={{ fontSize: 13, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", color: lineColor }}>
-                {bull ? "+" : ""}{change.toFixed(2)} ({bull ? "+" : ""}{pct.toFixed(2)}%)
-              </span>
-            </div>
-          </div>
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <p style={{ fontSize: 11, color: "#6B7280", fontFamily: "'JetBrains Mono',monospace", marginBottom: 4 }}>
+                  {singleMode ? `${chartSymbols[0]} · ${range}` : `Portfolio Comparison (${chartSymbols.length}) · ${range}`}
+                </p>
+                {singleMode ? (
+                  <>
+                    <p style={{ fontSize: 28, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", color: "#F9FAFB", lineHeight: 1 }}>
+                      {fmtCurrency(current)}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      {up ? <TrendingUp className="w-3.5 h-3.5" style={{ color: "#16C784" }} /> : <TrendingDown className="w-3.5 h-3.5" style={{ color: "#EA3943" }} />}
+                      <span style={{ fontSize: 13, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", color: up ? "#16C784" : "#EA3943" }}>
+                        {up ? "+" : ""}{change.toFixed(2)} ({up ? "+" : ""}{pct.toFixed(2)}%)
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ fontSize: 13, color: "#9CA3AF" }}>Normalized performance shown as % change from first point.</p>
+                )}
+              </div>
 
-          {/* Range selector */}
-          <div className="flex gap-1 rounded-lg p-1" style={{ background: "#0d1520" }}>
-            {ranges.map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className="rounded-md font-mono font-semibold transition-all"
-                style={{
-                  fontSize: 12,
-                  padding: "5px 10px",
-                  background: range === r ? "#1F2937" : "transparent",
-                  color: range === r ? "#3B82F6" : "#6B7280",
-                }}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Price line */}
-        <ResponsiveContainer width="100%" height={210}>
-          <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-            <CartesianGrid stroke="#1F2937" strokeDasharray="3 3" strokeOpacity={0.6} vertical={false} />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}
-              axisLine={false} tickLine={false}
-              interval={Math.floor(data.length / 6)}
-            />
-            <YAxis
-              tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}
-              axisLine={false} tickLine={false} width={54}
-              domain={["auto", "auto"]}
-              tickFormatter={(v) => `$${v.toFixed(0)}`}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Line type="monotone" dataKey="ma20" stroke="#F59E0B" strokeWidth={1.5}
-              dot={false} strokeDasharray="4 2" connectNulls isAnimationActive animationDuration={700} />
-            <Line type="monotone" dataKey="close" stroke={lineColor} strokeWidth={2.5} dot={false} isAnimationActive animationDuration={900} animationBegin={80} />
-          </ComposedChart>
-        </ResponsiveContainer>
-
-        {/* Volume */}
-        <div className="mt-2">
-          <ResponsiveContainer width="100%" height={52}>
-            <ComposedChart data={data} margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
-              <XAxis dataKey="label" hide />
-              <YAxis hide domain={["auto", "auto"]} />
-              <Bar dataKey="volume" radius={[2, 2, 0, 0]}>
-                {data.map((d, i) => (
-                  <Cell key={i} fill={d.close >= d.open ? "rgba(22,199,132,0.35)" : "rgba(234,57,67,0.35)"} />
+              <div className="flex gap-1 rounded-lg p-1" style={{ background: "#0d1520" }}>
+                {ranges.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRange(r)}
+                    className="rounded-md font-mono font-semibold transition-all"
+                    style={{
+                      fontSize: 12,
+                      padding: "5px 10px",
+                      background: range === r ? "#1F2937" : "transparent",
+                      color: range === r ? "#3B82F6" : "#6B7280",
+                    }}
+                  >
+                    {r}
+                  </button>
                 ))}
-              </Bar>
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Legend */}
-        <div className="flex items-center gap-5 mt-4 pt-4" style={{ borderTop: "1px solid #1F2937" }}>
-          {[
-            { dashed: false, color: lineColor, label: "Price" },
-            { dashed: true,  color: "#F59E0B", label: "MA 20" },
-            { box: true,     color: "rgba(22,199,132,0.35)", label: "Volume" },
-          ].map((l, i) => (
-            <div key={i} className="flex items-center gap-2">
-              {l.box
-                ? <div className="w-3 h-3 rounded-sm" style={{ background: l.color }} />
-                : <div className="w-6 h-0.5" style={{
-                    background: l.dashed ? "transparent" : l.color,
-                    borderTop: l.dashed ? `1.5px dashed ${l.color}` : undefined,
-                  }} />}
-              <span style={{ fontSize: 11, color: "#6B7280" }}>{l.label}</span>
+              </div>
             </div>
-          ))}
-        </div>
+
+            {loading && (
+              <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading market data...
+              </div>
+            )}
+
+            {!loading && singleMode && (
+              <>
+                <ResponsiveContainer width="100%" height={230}>
+                  <LineChart data={singleSeries} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid stroke="#1F2937" strokeDasharray="3 3" strokeOpacity={0.6} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} interval={Math.floor(Math.max(1, singleSeries.length / 6))} />
+                    <YAxis tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} width={54} tickFormatter={(v) => `$${v.toFixed(0)}`} />
+                    <Tooltip formatter={(v: any) => fmtCurrency(Number(v))} />
+                    <Line type="monotone" dataKey="close" stroke={up ? "#16C784" : "#EA3943"} strokeWidth={2.4} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+
+                <div className="mt-2">
+                  <ResponsiveContainer width="100%" height={58}>
+                    <ComposedChart data={singleSeries} margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
+                      <XAxis dataKey="label" hide />
+                      <YAxis hide domain={["auto", "auto"]} />
+                      <Bar dataKey="volume" fill="rgba(59,130,246,0.35)" radius={[2, 2, 0, 0]} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
+
+            {!loading && !singleMode && (
+              <ResponsiveContainer width="100%" height={290}>
+                <LineChart data={compareSeries} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid stroke="#1F2937" strokeDasharray="3 3" strokeOpacity={0.6} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} interval={Math.floor(Math.max(1, compareSeries.length / 6))} />
+                  <YAxis tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} width={54} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
+                  <Tooltip formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                  {chartSymbols.map((sym, idx) => (
+                    <Line key={sym} type="monotone" dataKey={sym} stroke={COLORS[idx % COLORS.length]} strokeWidth={2.2} dot={false} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+
+            {!loading && !singleMode && (
+              <div className="flex flex-wrap items-center gap-4 mt-4 pt-4" style={{ borderTop: "1px solid #1F2937" }}>
+                {chartSymbols.map((sym, idx) => (
+                  <div key={sym} className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-sm" style={{ background: COLORS[idx % COLORS.length] }} />
+                    <span style={{ fontSize: 11, color: "#9CA3AF", fontFamily: "'JetBrains Mono',monospace" }}>{sym}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
       </motion.div>

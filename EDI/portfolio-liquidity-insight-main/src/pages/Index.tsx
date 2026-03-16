@@ -59,7 +59,7 @@ const Index = () => {
     setShowSectionTabs(true);
     setAiPredictions(null);
     setCurrentPortfolio(portfolio);
-    if (portfolio.length > 0) setSelectedSymbol(portfolio[0].symbol);
+    setSelectedSymbol("");
     try {
       const res = await predictPortfolio(portfolio, "US");
       setResult(res);
@@ -243,12 +243,23 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-3">
             <div className="lg:sticky lg:top-20">
-              <PortfolioInput symbols={symbols} onSubmit={handleSubmit} loading={loading} />
+              <PortfolioInput
+                symbols={symbols}
+                onSubmit={handleSubmit}
+                onSelectSymbol={setSelectedSymbol}
+                onCompareAll={() => setSelectedSymbol("")}
+                selectedSymbol={selectedSymbol}
+                loading={loading}
+              />
             </div>
           </div>
 
           <div className="lg:col-span-5">
-            <StockPriceChart symbol={selectedSymbol} />
+            <StockPriceChart
+              symbol={selectedSymbol || undefined}
+              symbols={currentPortfolio.map((p) => p.symbol)}
+              market="US"
+            />
           </div>
 
           <div className="lg:col-span-4">

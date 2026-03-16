@@ -6,10 +6,20 @@ import type { PortfolioAsset } from "@/lib/types";
 interface PortfolioInputProps {
   symbols: string[];
   onSubmit: (portfolio: PortfolioAsset[]) => void;
+  onSelectSymbol?: (symbol: string) => void;
+  onCompareAll?: () => void;
+  selectedSymbol?: string;
   loading: boolean;
 }
 
-export default function PortfolioInput({ symbols, onSubmit, loading }: PortfolioInputProps) {
+export default function PortfolioInput({
+  symbols,
+  onSubmit,
+  onSelectSymbol,
+  onCompareAll,
+  selectedSymbol,
+  loading,
+}: PortfolioInputProps) {
   const [portfolio, setPortfolio] = useState<PortfolioAsset[]>([]);
   const [search, setSearch]           = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -87,6 +97,21 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
         >
           LIVE BUILDER
         </span>
+        {portfolio.length > 1 && (
+          <button
+            type="button"
+            onClick={onCompareAll}
+            className="ml-2 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+            style={{
+              color: "#93C5FD",
+              border: "1px solid rgba(147,197,253,0.35)",
+              background: "rgba(59,130,246,0.16)",
+              letterSpacing: "0.04em",
+            }}
+          >
+            COMPARE ALL
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -156,11 +181,20 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
               transition={{ delay: i * 0.04 }}
               className="watchlist-row grid items-center px-4 py-2.5 group"
               style={{ gridTemplateColumns: "1fr 70px 90px 60px 28px" }}
+              onClick={() => onSelectSymbol?.(asset.symbol)}
             >
               {/* Symbol */}
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />
-                <span className="font-mono font-semibold text-[#3B82F6] text-sm">{asset.symbol}</span>
+                <div
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ background: selectedSymbol === asset.symbol ? "#16C784" : "#3B82F6" }}
+                />
+                <span
+                  className="font-mono font-semibold text-sm"
+                  style={{ color: selectedSymbol === asset.symbol ? "#16C784" : "#3B82F6" }}
+                >
+                  {asset.symbol}
+                </span>
               </div>
 
               {/* Qty input */}
@@ -168,6 +202,7 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
                 <input
                   type="number"
                   value={asset.qty}
+                  onClick={(e) => e.stopPropagation()}
                   onChange={(e) => updateQty(i, parseInt(e.target.value) || 1)}
                   min={1}
                   className="w-20 h-7 text-xs bg-[#0d1520] border border-[#1F2937] rounded text-right pr-2 text-gray-200 font-mono focus:outline-none focus:border-[#3B82F6] transition-colors"
@@ -179,6 +214,7 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
                 <input
                   type="number"
                   value={asset.price}
+                  onClick={(e) => e.stopPropagation()}
                   onChange={(e) => updatePrice(i, parseFloat(e.target.value) || 0.01)}
                   min={0.01}
                   step={0.01}
@@ -186,22 +222,25 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
                 />
               </div>
 
-              {/* Fake liquidity badge */}
+              {/* Selection badge */}
               <div className="flex justify-end">
                 <span
                   className="text-[10px] px-1.5 py-0.5 rounded font-semibold font-mono"
                   style={{
-                    background: i % 3 === 0 ? "rgba(22,199,132,0.1)" : i % 3 === 1 ? "rgba(245,158,11,0.1)" : "rgba(234,57,67,0.1)",
-                    color: i % 3 === 0 ? "#16C784" : i % 3 === 1 ? "#F59E0B" : "#EA3943",
+                    background: selectedSymbol === asset.symbol ? "rgba(22,199,132,0.1)" : "rgba(59,130,246,0.1)",
+                    color: selectedSymbol === asset.symbol ? "#16C784" : "#3B82F6",
                   }}
                 >
-                  {i % 3 === 0 ? "High" : i % 3 === 1 ? "Med" : "Low"}
+                  {selectedSymbol === asset.symbol ? "Single" : "Compare"}
                 </span>
               </div>
 
               {/* Remove */}
               <button
-                onClick={() => removeAsset(i)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeAsset(i);
+                }}
                 className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-gray-600 hover:text-[#EA3943]"
               >
                 <Trash2 className="w-3.5 h-3.5" />

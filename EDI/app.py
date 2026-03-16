@@ -17,6 +17,7 @@ import logging
 import pickle
 import io
 import math
+import requests
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -71,6 +72,21 @@ FEATURES_PATH = FEATURES_PATH_US
 # ── Constants ──────────────────────────────────────────────────────────────────
 FEATURES      = ["volume", "spread_proxy", "volatility", "amihud_ratio"]
 TRADING_HOURS = 6.5          # NYSE hours per day
+YAHOO_QUOTE_URLS = [
+    "https://query1.finance.yahoo.com/v7/finance/quote",
+    "https://query2.finance.yahoo.com/v7/finance/quote",
+]
+YAHOO_CHART_URLS = [
+    "https://query1.finance.yahoo.com/v8/finance/chart",
+    "https://query2.finance.yahoo.com/v8/finance/chart",
+]
+HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json,text/plain,*/*",
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # APP FACTORY
@@ -391,6 +407,106 @@ def _rule_based_explain(prediction, market_context=None):
     )
 
 
+def _fetch_live_quotes(symbols):
+    """Fetch latest prices from Yahoo Finance for a list of symbols."""
+    cleaned = sorted({str(s).strip().upper() for s in symbols if str(s).strip()})
+    if not cleaned:
+        return {}
+
+    for url in YAHOO_QUOTE_URLS:
+        try:
+            resp = requests.get(
+                url,
+                params={"symbols": ",".join(cleaned)},
+                headers=HTTP_HEADERS,
+                timeout=8,
+            )
+            resp.raise_for_status()
+            payload = resp.json() or {}
+            result = payload.get("quoteResponse", {}).get("result", [])
+
+            quotes = {}
+            for row in result:
+                sym = str(row.get("symbol", "")).upper()
+                price = row.get("regularMarketPrice")
+                if sym and isinstance(price, (int, float)) and float(price) > 0:
+                    quotes[sym] = float(price)
+            if quotes:
+                return quotes
+        except Exception as e:
+            log.warning("Live quote fetch failed via %s: %s", url, str(e))
+
+    # Fallback path: use the latest close from chart endpoint per symbol.
+    fallback_quotes = {}
+    for sym in cleaned:
+        candles = _fetch_symbol_history(sym, "1D")
+        if candles:
+            fallback_quotes[sym] = float(candles[-1]["close"])
+    return fallback_quotes
+
+
+def _range_to_yahoo(range_key: str):
+    key = str(range_key or "1M").upper()
+    mapping = {
+        "1D": ("1d", "15m"),
+        "5D": ("5d", "30m"),
+        "1M": ("1mo", "1d"),
+        "3M": ("3mo", "1d"),
+        "1Y": ("1y", "1wk"),
+    }
+    return mapping.get(key, ("1mo", "1d"))
+
+
+def _fetch_symbol_history(symbol: str, range_key: str):
+    period, interval = _range_to_yahoo(range_key)
+    for url in YAHOO_CHART_URLS:
+        try:
+            resp = requests.get(
+                f"{url}/{symbol}",
+                params={"range": period, "interval": interval, "includePrePost": "false"},
+                headers=HTTP_HEADERS,
+                timeout=8,
+            )
+            resp.raise_for_status()
+            payload = resp.json() or {}
+            rows = payload.get("chart", {}).get("result", [])
+            if not rows:
+                continue
+
+            row = rows[0]
+            timestamps = row.get("timestamp", []) or []
+            indicators = row.get("indicators", {}).get("quote", [])
+            quote = indicators[0] if indicators else {}
+
+            closes = quote.get("close", []) or []
+            opens = quote.get("open", []) or []
+            highs = quote.get("high", []) or []
+            lows = quote.get("low", []) or []
+            volumes = quote.get("volume", []) or []
+
+            out = []
+            for i, ts in enumerate(timestamps):
+                close = closes[i] if i < len(closes) else None
+                if close is None:
+                    continue
+                dt = datetime.utcfromtimestamp(ts)
+                out.append({
+                    "ts": int(ts),
+                    "date": dt.strftime("%Y-%m-%d"),
+                    "label": dt.strftime("%b %d"),
+                    "open": float(opens[i]) if i < len(opens) and opens[i] is not None else float(close),
+                    "high": float(highs[i]) if i < len(highs) and highs[i] is not None else float(close),
+                    "low": float(lows[i]) if i < len(lows) and lows[i] is not None else float(close),
+                    "close": float(close),
+                    "volume": int(volumes[i]) if i < len(volumes) and volumes[i] is not None else 0,
+                })
+            if out:
+                return out
+        except Exception as e:
+            log.warning("Price history fetch failed for %s via %s: %s", symbol, url, str(e))
+    return []
+
+
 def _err(msg: str, code: int = 400):
     log.warning("Client error %d: %s", code, msg)
     return jsonify({"error": msg, "status": code}), code
@@ -701,6 +817,48 @@ def get_stocks():
         })
 
 
+@app.route("/quotes", methods=["GET"])
+def get_quotes():
+    """Return live quote map for symbols, used by frontend pricing and valuation."""
+    symbols_raw = request.args.get("symbols", "")
+    market = request.args.get("market", "US").upper()
+    _ = _market_state(market)  # normalize market value; kept for response symmetry
+
+    symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
+    if not symbols:
+        return _err("Query param 'symbols' is required (comma-separated)")
+
+    quotes = _fetch_live_quotes(symbols)
+    return jsonify({
+        "market": market,
+        "quotes": quotes,
+        "count": len(quotes),
+    })
+
+
+@app.route("/price-history", methods=["GET"])
+def get_price_history():
+    """Return symbol->candles map for range-based chart rendering."""
+    symbols_raw = request.args.get("symbols", "")
+    market = request.args.get("market", "US").upper()
+    range_key = request.args.get("range", "1M")
+    _ = _market_state(market)
+
+    symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
+    if not symbols:
+        return _err("Query param 'symbols' is required (comma-separated)")
+
+    history = {}
+    for sym in symbols[:10]:
+        history[sym] = _fetch_symbol_history(sym, range_key)
+
+    return jsonify({
+        "market": market,
+        "range": range_key.upper(),
+        "history": history,
+    })
+
+
 @app.route("/predict", methods=["POST"])
 def predict():
     """
@@ -779,8 +937,12 @@ def predict():
             seen[sym]["price"] = h.get("price")
     validated = [{"symbol": s, "qty": v["qty"], "price": v.get("price")} for s, v in seen.items()]
 
+    # Resolve missing prices via live market quotes.
+    symbols_missing_price = [h["symbol"] for h in validated if h.get("price") is None]
+    live_quotes = _fetch_live_quotes(symbols_missing_price) if symbols_missing_price else {}
+
     # ── 2. Fetch latest features ───────────────────────────────────────────────
-    records, missing = [], []
+    records, missing, unresolved_price = [], [], []
 
     for holding in validated:
         sym = holding["symbol"]
@@ -792,7 +954,14 @@ def predict():
             continue
 
         row = lookup.loc[sym]
-        close = float(req_price) if req_price is not None else 1.0
+        quote_price = live_quotes.get(sym)
+        if req_price is not None:
+            close = float(req_price)
+        elif quote_price is not None:
+            close = float(quote_price)
+        else:
+            close = 1.0
+            unresolved_price.append(sym)
 
         position_value   = qty * close
         daily_volume_usd = float(row["volume"]) * close
@@ -862,6 +1031,10 @@ def predict():
     warnings = []
     if missing:
         warnings.append(f"Symbols not found (skipped): {', '.join(missing)}")
+    if unresolved_price:
+        warnings.append(
+            "Live market price unavailable for: " + ", ".join(sorted(set(unresolved_price)))
+        )
     very_illiquid = df[df["liquidity_score"] < 0.30]["symbol"].tolist()
     if very_illiquid:
         warnings.append(f"Very illiquid positions: {', '.join(very_illiquid)}")

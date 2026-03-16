@@ -36,6 +36,43 @@ export async function getStockSymbols(market: string = "US"): Promise<string[]> 
   }
 }
 
+export async function getLiveQuotes(
+  symbols: string[],
+  market: string = "US"
+): Promise<Record<string, number>> {
+  const cleaned = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
+  if (!cleaned.length) return {};
+
+  const res = await fetch(
+    `${API_BASE}/quotes?market=${encodeURIComponent(market)}&symbols=${encodeURIComponent(cleaned.join(","))}`
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error ?? `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return (data.quotes as Record<string, number>) ?? {};
+}
+
+export async function getPriceHistory(
+  symbols: string[],
+  range: "1D" | "5D" | "1M" | "3M" | "1Y",
+  market: string = "US"
+): Promise<Record<string, any[]>> {
+  const cleaned = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
+  if (!cleaned.length) return {};
+
+  const res = await fetch(
+    `${API_BASE}/price-history?market=${encodeURIComponent(market)}&range=${encodeURIComponent(range)}&symbols=${encodeURIComponent(cleaned.join(","))}`
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error ?? `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return (data.history as Record<string, any[]>) ?? {};
+}
+
 // ============================================================
 // POST /predict  →  full ML portfolio analysis
 // ============================================================
@@ -43,10 +80,23 @@ export async function predictPortfolio(
   portfolio: PortfolioAsset[],
   market: string = "US"
 ): Promise<PortfolioResult> {
+  const symbols = portfolio.map((p) => p.symbol);
+  let quotes: Record<string, number> = {};
+  try {
+    quotes = await getLiveQuotes(symbols, market);
+  } catch {
+    quotes = {};
+  }
+
+  const payloadPortfolio = portfolio.map((p) => ({
+    ...p,
+    price: quotes[p.symbol.toUpperCase()] ?? p.price,
+  }));
+
   const res = await fetch(`${API_BASE}/predict`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ portfolio, market }),
+    body: JSON.stringify({ portfolio: payloadPortfolio, market }),
   });
 
   if (!res.ok) {
