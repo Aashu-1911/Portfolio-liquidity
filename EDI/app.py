@@ -780,7 +780,7 @@ def predict():
     validated = [{"symbol": s, "qty": v["qty"], "price": v.get("price")} for s, v in seen.items()]
 
     # ── 2. Fetch latest features ───────────────────────────────────────────────
-    records, missing, estimated_prices = [], [], []
+    records, missing = [], []
 
     for holding in validated:
         sym = holding["symbol"]
@@ -793,8 +793,6 @@ def predict():
 
         row = lookup.loc[sym]
         close = float(req_price) if req_price is not None else 1.0
-        if req_price is None:
-            estimated_prices.append(sym)
 
         position_value   = qty * close
         daily_volume_usd = float(row["volume"]) * close
@@ -864,11 +862,6 @@ def predict():
     warnings = []
     if missing:
         warnings.append(f"Symbols not found (skipped): {', '.join(missing)}")
-    if estimated_prices:
-        warnings.append(
-            "Price not provided for symbols (using 1.0 fallback): "
-            + ", ".join(estimated_prices)
-        )
     very_illiquid = df[df["liquidity_score"] < 0.30]["symbol"].tolist()
     if very_illiquid:
         warnings.append(f"Very illiquid positions: {', '.join(very_illiquid)}")

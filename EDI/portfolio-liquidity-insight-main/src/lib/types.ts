@@ -42,6 +42,7 @@ export interface LiquidityFeatures {
 export interface PortfolioAsset {
   symbol: string;
   qty: number;
+  price: number;
 }
 
 export interface AssetResult {

@@ -23,7 +23,7 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
     .slice(0, 8);
 
   const addSymbol = useCallback((symbol: string) => {
-    setPortfolio((p) => [...p, { symbol, qty: 10 }]);
+    setPortfolio((p) => [...p, { symbol, qty: 10, price: 100 }]);
     setSearch("");
     setShowDropdown(false);
   }, []);
@@ -35,6 +35,12 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
   const updateQty = (index: number, qty: number) => {
     setPortfolio((p) =>
       p.map((a, i) => (i === index ? { ...a, qty: Math.max(1, qty) } : a))
+    );
+  };
+
+  const updatePrice = (index: number, price: number) => {
+    setPortfolio((p) =>
+      p.map((a, i) => (i === index ? { ...a, price: Math.max(0.01, price) } : a))
     );
   };
 
@@ -125,13 +131,14 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
         <div
           className="grid px-4 py-2"
           style={{
-            gridTemplateColumns: "1fr 80px 60px 28px",
+            gridTemplateColumns: "1fr 70px 90px 60px 28px",
             borderBottom: "1px solid rgba(51,65,85,0.75)",
             background: "rgba(15,23,42,0.55)",
           }}
         >
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Symbol</span>
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest text-right">Shares</span>
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest text-right">Price</span>
           <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest text-right">Liq.</span>
           <span />
         </div>
@@ -148,7 +155,7 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
               exit={{ opacity: 0, x: 16, height: 0 }}
               transition={{ delay: i * 0.04 }}
               className="watchlist-row grid items-center px-4 py-2.5 group"
-              style={{ gridTemplateColumns: "1fr 80px 60px 28px" }}
+              style={{ gridTemplateColumns: "1fr 70px 90px 60px 28px" }}
             >
               {/* Symbol */}
               <div className="flex items-center gap-2">
@@ -163,6 +170,18 @@ export default function PortfolioInput({ symbols, onSubmit, loading }: Portfolio
                   value={asset.qty}
                   onChange={(e) => updateQty(i, parseInt(e.target.value) || 1)}
                   min={1}
+                  className="w-20 h-7 text-xs bg-[#0d1520] border border-[#1F2937] rounded text-right pr-2 text-gray-200 font-mono focus:outline-none focus:border-[#3B82F6] transition-colors"
+                />
+              </div>
+
+              {/* Price input */}
+              <div className="flex justify-end">
+                <input
+                  type="number"
+                  value={asset.price}
+                  onChange={(e) => updatePrice(i, parseFloat(e.target.value) || 0.01)}
+                  min={0.01}
+                  step={0.01}
                   className="w-20 h-7 text-xs bg-[#0d1520] border border-[#1F2937] rounded text-right pr-2 text-gray-200 font-mono focus:outline-none focus:border-[#3B82F6] transition-colors"
                 />
               </div>
