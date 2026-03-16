@@ -357,7 +357,7 @@ const IndexIndia = () => {
               </div>
 
               <div id="assets-breakdown" className="scroll-mt-24">
-                <AssetTable assets={result.assets} />
+                <AssetTable assets={result.assets} market="INDIA" />
               </div>
 
             </motion.div>

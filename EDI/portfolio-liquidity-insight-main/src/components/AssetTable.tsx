@@ -1,9 +1,13 @@
 import { motion } from "framer-motion";
 import type { AssetResult } from "@/lib/types";
 
-interface Props { assets: AssetResult[]; }
+interface Props {
+  assets: AssetResult[];
+  market?: string;
+}
 
-export default function AssetTable({ assets }: Props) {
+export default function AssetTable({ assets, market = "US" }: Props) {
+  const currencySymbol = market.toUpperCase() === "INDIA" ? "₹" : "$";
   const riskStyle = (risk: string) => {
     if (risk === "Low")
       return { color: "#16C784", bg: "rgba(22,199,132,0.1)",  border: "rgba(22,199,132,0.25)" };
@@ -91,13 +95,13 @@ export default function AssetTable({ assets }: Props) {
                     {/* Price */}
                     <td className="px-4 py-3.5 text-right">
                       <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#F9FAFB" }}>
-                        ${a.close.toFixed(2)}
+                        {currencySymbol}{a.close.toFixed(2)}
                       </span>
                     </td>
                     {/* Value */}
                     <td className="px-4 py-3.5 text-right">
                       <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#F9FAFB" }}>
-                        ${a.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        {currencySymbol}{a.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </span>
                     </td>
                     {/* Weight */}

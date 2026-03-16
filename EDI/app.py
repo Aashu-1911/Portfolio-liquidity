@@ -524,7 +524,7 @@ def _parse_money(value: str) -> float:
         return float(value)
     if not value:
         return 0.0
-    cleaned = str(value).replace("$", "").replace(",", "").strip()
+    cleaned = str(value).replace("$", "").replace("₹", "").replace(",", "").strip()
     return _to_float(cleaned, 0.0)
 
 
@@ -1043,6 +1043,8 @@ def predict():
             f"High market impact ({price_impact_pct:.1f}%) — order may move prices."
         )
 
+    currency_symbol = "₹" if market == "INDIA" else "$"
+
     response = {
         "market":             market,
         "liquidity_score":    round(portfolio_score, 4),
@@ -1050,7 +1052,7 @@ def predict():
         "liquidation_time":   _fmt_time(liq_hours),
         "price_impact":       f"{price_impact_pct:.2f}%" if np.isfinite(price_impact_pct) else "N/A",
         "most_illiquid_asset": most_illiquid,
-        "portfolio_value":    f"${total_value:,.2f}",
+        "portfolio_value":    f"{currency_symbol}{total_value:,.2f}",
         "total_positions":    len(df),
         "model_used":         model_name,
         "asset_breakdown":    breakdown,

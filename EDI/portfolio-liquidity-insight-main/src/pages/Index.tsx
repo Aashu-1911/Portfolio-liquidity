@@ -388,7 +388,7 @@ const Index = () => {
 
               {/* Zone 5: Asset Table */}
               <div id="assets-breakdown" className="scroll-mt-24">
-                <AssetTable assets={result.assets} />
+                <AssetTable assets={result.assets} market="US" />
               </div>
 
             </motion.div>

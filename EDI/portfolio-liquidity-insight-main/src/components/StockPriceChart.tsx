@@ -24,8 +24,12 @@ interface StockPriceChartProps {
 
 const COLORS = ["#16C784", "#3B82F6", "#F59E0B", "#EA3943", "#A78BFA", "#22D3EE"];
 
-function fmtCurrency(value: number): string {
-  return `$${value.toFixed(2)}`;
+function getCurrencySymbol(market: string): string {
+  return market.toUpperCase() === "INDIA" ? "₹" : "$";
+}
+
+function fmtCurrency(value: number, market: string): string {
+  return `${getCurrencySymbol(market)}${value.toFixed(2)}`;
 }
 
 export default function StockPriceChart({ symbol, symbols = [], market = "US" }: StockPriceChartProps) {
@@ -101,6 +105,7 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
   const up = change >= 0;
 
   const ranges: TimeRange[] = ["1D", "5D", "1M", "3M", "1Y"];
+  const currencySymbol = getCurrencySymbol(market);
 
   return (
     <div className="dashboard-section">
@@ -127,7 +132,7 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
                 {singleMode ? (
                   <>
                     <p style={{ fontSize: 28, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", color: "#F9FAFB", lineHeight: 1 }}>
-                      {fmtCurrency(current)}
+                      {fmtCurrency(current, market)}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1.5">
                       {up ? <TrendingUp className="w-3.5 h-3.5" style={{ color: "#16C784" }} /> : <TrendingDown className="w-3.5 h-3.5" style={{ color: "#EA3943" }} />}
@@ -173,8 +178,8 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
                   <LineChart data={singleSeries} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid stroke="#1F2937" strokeDasharray="3 3" strokeOpacity={0.6} vertical={false} />
                     <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} interval={Math.floor(Math.max(1, singleSeries.length / 6))} />
-                    <YAxis tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} width={54} tickFormatter={(v) => `$${v.toFixed(0)}`} />
-                    <Tooltip formatter={(v: any) => fmtCurrency(Number(v))} />
+                    <YAxis tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} width={54} tickFormatter={(v) => `${currencySymbol}${v.toFixed(0)}`} />
+                    <Tooltip formatter={(v: any) => fmtCurrency(Number(v), market)} />
                     <Line type="monotone" dataKey="close" stroke={up ? "#16C784" : "#EA3943"} strokeWidth={2.4} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
