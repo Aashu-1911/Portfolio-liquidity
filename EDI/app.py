@@ -16,19 +16,19 @@ import time
 import logging
 import pickle
 import io
+import math
 import numpy as np
 import pandas as pd
 from datetime import datetime
 from flask import Flask, jsonify, request, g, send_file
 
-# Import new modules
+# Optional LLM explanation support
 try:
-    from prediction_engine import predict_future_liquidity, predict_portfolio_future
-    from llm_reasoning import explain_liquidity_prediction, get_market_context
-    ADVANCED_FEATURES = True
+    from llm_reasoning import explain_liquidity_prediction
+    LLM_EXPLANATION_AVAILABLE = True
 except ImportError:
-    ADVANCED_FEATURES = False
-    logging.warning("Advanced features not available. Install dependencies.")
+    LLM_EXPLANATION_AVAILABLE = False
+    logging.warning("LLM explanation module not available. Using rule-based explanations.")
 
 # PDF report generation support
 try:
@@ -59,17 +59,14 @@ BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
 # US Market
 MODEL_PATH_US    = os.path.join(BASE_DIR, "model.pkl")
 FEATURES_PATH_US = os.path.join(BASE_DIR, "liquidity_features.csv")
-PRICES_PATH_US   = os.path.join(BASE_DIR, "cleaned_sp500.csv")
 
 # Indian Market
 MODEL_PATH_INDIA    = os.path.join(BASE_DIR, "model_india.pkl")
 FEATURES_PATH_INDIA = os.path.join(BASE_DIR, "liquidity_features_india.csv")
-PRICES_PATH_INDIA   = os.path.join(BASE_DIR, "cleaned_nifty.csv")
 
 # Legacy paths (backward compatibility)
 MODEL_PATH    = MODEL_PATH_US
 FEATURES_PATH = FEATURES_PATH_US
-PRICES_PATH   = PRICES_PATH_US
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 FEATURES      = ["volume", "spread_proxy", "volatility", "amihud_ratio"]
@@ -113,33 +110,25 @@ def log_request(response):
 # ══════════════════════════════════════════════════════════════════════════════
 # STARTUP — load artifacts once for both markets
 # ══════════════════════════════════════════════════════════════════════════════
-def _build_lookup(features_path, prices_path) -> pd.DataFrame:
-    """Merge liquidity features with close prices; return latest row per symbol."""
+def _load_feature_cache(features_path):
+    """Load full precomputed feature dataset once and build a latest-row lookup."""
     log.info(f"Loading feature data from {features_path}...")
     
     if not os.path.exists(features_path):
         log.warning(f"Features file not found: {features_path}")
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
     
-    feats  = pd.read_csv(features_path, parse_dates=["date"])
-    
-    if os.path.exists(prices_path):
-        prices = pd.read_csv(prices_path, parse_dates=["date"])[
-            ["symbol", "date", "close", "open"]
-        ]
-        merged = feats.merge(prices, on=["symbol", "date"], how="left")
-    else:
-        merged = feats
-        merged['close'] = merged.get('close', 0)
-        merged['open'] = merged.get('open', 0)
-    
+    feats = pd.read_csv(features_path, parse_dates=["date"])
+    feats["symbol"] = feats["symbol"].astype(str).str.upper()
+
+    # Precompute features used at inference to avoid per-request transforms.
     latest = (
-        merged.sort_values("date")
+        feats.sort_values("date")
               .groupby("symbol")
               .last()
               .reset_index()
     )
-    return latest.set_index("symbol")
+    return latest.set_index("symbol"), feats
 
 
 def _load_model(model_path):
@@ -153,10 +142,12 @@ def _load_model(model_path):
     return artifact["model"], artifact["model_name"], artifact.get("metrics", {})
 
 
+_startup_t0 = time.perf_counter()
+
 # Load US Market
 log.info("Loading US market data...")
 _model_us, _model_name_us, _metrics_us = _load_model(MODEL_PATH_US)
-_lookup_us = _build_lookup(FEATURES_PATH_US, PRICES_PATH_US)
+_lookup_us, _history_us = _load_feature_cache(FEATURES_PATH_US)
 _all_symbols_us = sorted(_lookup_us.index.tolist()) if not _lookup_us.empty else []
 
 if _model_us:
@@ -167,13 +158,16 @@ else:
 # Load Indian Market
 log.info("Loading Indian market data...")
 _model_india, _model_name_india, _metrics_india = _load_model(MODEL_PATH_INDIA)
-_lookup_india = _build_lookup(FEATURES_PATH_INDIA, PRICES_PATH_INDIA)
+_lookup_india, _history_india = _load_feature_cache(FEATURES_PATH_INDIA)
 _all_symbols_india = sorted(_lookup_india.index.tolist()) if not _lookup_india.empty else []
 
 if _model_india:
     log.info(f"✅  Indian Market Ready — {len(_all_symbols_india)} symbols · model: {_model_name_india} · R²={_metrics_india.get('R2', 0):.4f}")
 else:
     log.warning("⚠  Indian Market model not loaded")
+
+_startup_ms = (time.perf_counter() - _startup_t0) * 1000
+log.info("Startup complete in %.1fms", _startup_ms)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -199,6 +193,202 @@ def _fmt_time(hours: float) -> str:
 def _predict_score(row, model) -> float:
     X = np.array([[float(row[f]) for f in FEATURES]])
     return float(np.clip(model.predict(X)[0], 0.0, 1.0))
+
+
+def _market_state(market: str):
+    m = str(market or "US").upper()
+    if m == "INDIA":
+        return {
+            "market": "INDIA",
+            "model": _model_india,
+            "model_name": _model_name_india,
+            "metrics": _metrics_india,
+            "lookup": _lookup_india,
+            "history": _history_india,
+            "symbols": _all_symbols_india,
+        }
+    return {
+        "market": "US",
+        "model": _model_us,
+        "model_name": _model_name_us,
+        "metrics": _metrics_us,
+        "lookup": _lookup_us,
+        "history": _history_us,
+        "symbols": _all_symbols_us,
+    }
+
+
+def _get_symbol_history(symbol: str, market: str) -> pd.DataFrame:
+    state = _market_state(market)
+    history = state["history"]
+    if history.empty:
+        return pd.DataFrame()
+    return history[history["symbol"] == symbol.upper()].sort_values("date")
+
+
+def _predict_future_from_cached_features(symbol: str, market: str):
+    """Forecast t+1/t+3/t+7 using cached features + trained base model only."""
+    state = _market_state(market)
+    lookup = state["lookup"]
+    model = state["model"]
+    market_name = state["market"]
+
+    sym = symbol.upper()
+    if model is None:
+        raise ValueError(f"{market_name} market model is not available")
+    if sym not in lookup.index:
+        raise ValueError(f"Symbol {sym} not found in {market_name} dataset")
+
+    row = lookup.loc[sym]
+    current = _predict_score(row, model)
+
+    history = _get_symbol_history(sym, market_name)
+    if history.empty:
+        drift = 0.0
+    else:
+        liq = history["liquidity_score"].dropna()
+        recent7 = float(liq.tail(7).mean()) if len(liq) >= 1 else current
+        recent30 = float(liq.tail(30).mean()) if len(liq) >= 1 else current
+        drift = float(np.clip(recent7 - recent30, -0.08, 0.08))
+
+    # Penalize high volatility/spread and high illiquidity.
+    vol_penalty = float(np.clip(float(row.get("volatility", 0.0)) * 3.0, 0.0, 0.08))
+    spread_penalty = float(np.clip(float(row.get("spread_proxy", 0.0)) * 1.5, 0.0, 0.05))
+    amihud_penalty = float(np.clip(float(row.get("amihud_ratio", 0.0)) * 5.0, 0.0, 0.05))
+    penalty = vol_penalty + spread_penalty + amihud_penalty
+
+    t1 = float(np.clip(current + (0.35 * drift) - (0.25 * penalty), 0.0, 1.0))
+    t3 = float(np.clip(current + (0.70 * drift) - (0.50 * penalty), 0.0, 1.0))
+    t7 = float(np.clip(current + (1.00 * drift) - (0.75 * penalty), 0.0, 1.0))
+
+    latest_date = row.get("date")
+    current_date = str(latest_date.date() if hasattr(latest_date, "date") else latest_date)
+
+    return {
+        "symbol": sym,
+        "current_date": current_date,
+        "current_liquidity": round(current, 4),
+        "predictions": {
+            "t_plus_1": {"days_ahead": 1, "predicted_liquidity": round(t1, 4)},
+            "t_plus_3": {"days_ahead": 3, "predicted_liquidity": round(t3, 4)},
+            "t_plus_7": {"days_ahead": 7, "predicted_liquidity": round(t7, 4)},
+        },
+        "inference_source": "cached_precomputed_features",
+    }
+
+
+def _predict_portfolio_future_from_cache(portfolio: list, market: str):
+    predictions = []
+    weights = []
+    for h in portfolio:
+        sym = str(h.get("symbol", "")).upper()
+        qty = float(h.get("qty", 0))
+        if not sym or qty <= 0:
+            continue
+        try:
+            pred = _predict_future_from_cached_features(sym, market)
+            predictions.append(pred)
+            weights.append(qty)
+        except Exception as e:
+            log.warning("Skipping %s in portfolio future prediction: %s", sym, str(e))
+
+    if not predictions:
+        raise ValueError("No valid symbols available for portfolio future prediction")
+
+    total_qty = sum(weights)
+    out = {
+        "portfolio_size": len(predictions),
+        "current_liquidity": 0.0,
+        "predictions": {},
+        "asset_predictions": predictions,
+        "inference_source": "cached_precomputed_features",
+    }
+
+    current_weighted = sum(p["current_liquidity"] * w for p, w in zip(predictions, weights))
+    out["current_liquidity"] = round(current_weighted / total_qty, 4)
+
+    for horizon in [1, 3, 7]:
+        key = f"t_plus_{horizon}"
+        weighted = sum(p["predictions"][key]["predicted_liquidity"] * w for p, w in zip(predictions, weights))
+        out["predictions"][key] = {
+            "days_ahead": horizon,
+            "predicted_liquidity": round(weighted / total_qty, 4),
+        }
+
+    return out
+
+
+def _market_context_from_cache(symbol: str, market: str, days_back=30):
+    hist = _get_symbol_history(symbol, market)
+    if hist.empty:
+        return None
+
+    recent = hist.tail(days_back)
+    if len(recent) < 2:
+        return None
+
+    def _pct_change(last, avg):
+        if not math.isfinite(avg) or avg == 0:
+            return 0.0
+        return (last - avg) / avg * 100
+
+    v_last = float(recent["volume"].iloc[-1])
+    v_avg = float(recent["volume"].mean())
+    s_last = float(recent["spread_proxy"].iloc[-1])
+    s_avg = float(recent["spread_proxy"].mean())
+    vol_last = float(recent["volatility"].iloc[-1])
+    vol_avg = float(recent["volatility"].mean())
+    liq_change = float(recent["liquidity_score"].iloc[-1] - recent["liquidity_score"].iloc[0])
+
+    volume_trend = _pct_change(v_last, v_avg)
+    spread_trend = _pct_change(s_last, s_avg)
+    volatility_trend = _pct_change(vol_last, vol_avg)
+
+    return {
+        "symbol": symbol.upper(),
+        "latest_date": str(recent["date"].iloc[-1]),
+        "current_liquidity": float(recent["liquidity_score"].iloc[-1]),
+        "liquidity_change_30d": liq_change,
+        "avg_volume": v_avg,
+        "volume_trend_pct": float(volume_trend),
+        "avg_spread": s_avg,
+        "spread_trend_pct": float(spread_trend),
+        "avg_volatility": vol_avg,
+        "volatility_trend_pct": float(volatility_trend),
+        "liquidity_direction": "increasing" if liq_change > 0 else "decreasing",
+        "volume_direction": "increasing" if volume_trend > 0 else "decreasing",
+        "spread_direction": "widening" if spread_trend > 0 else "tightening",
+        "volatility_direction": "increasing" if volatility_trend > 0 else "decreasing",
+    }
+
+
+def _rule_based_explain(prediction, market_context=None):
+    symbol = prediction.get("symbol", "Portfolio")
+    current = float(prediction.get("current_liquidity", 0))
+    preds = prediction.get("predictions", {})
+    t7 = float(preds.get("t_plus_7", {}).get("predicted_liquidity", current))
+    delta = t7 - current
+
+    if delta > 0.03:
+        trend = "improving"
+    elif delta < -0.03:
+        trend = "weakening"
+    else:
+        trend = "stable"
+
+    reason = "Recent feature trends are mixed."
+    if market_context:
+        reason = (
+            f"Volume is {market_context.get('volume_direction', 'stable')}, "
+            f"spreads are {market_context.get('spread_direction', 'stable')}, "
+            f"and volatility is {market_context.get('volatility_direction', 'stable')}."
+        )
+
+    return (
+        f"Liquidity outlook for {symbol} is {trend} over the next 7 days. "
+        f"Current score is {current:.2f} and projected 7-day score is {t7:.2f}. "
+        f"{reason}"
+    )
 
 
 def _err(msg: str, code: int = 400):
@@ -547,21 +737,15 @@ def predict():
     portfolio = body.get("portfolio")
     market = body.get("market", "US").upper()
     
-    # Select appropriate model and lookup based on market
-    if market == "INDIA":
-        model = _model_india
-        model_name = _model_name_india
-        lookup = _lookup_india
-        if model is None:
-            return _err("Indian market model not available. Run setup for INDIA market.", 503)
-    else:
-        model = _model_us
-        model_name = _model_name_us
-        lookup = _lookup_us
-        if model is None:
-            return _err("US market model not available. Run setup for US market.", 503)
+    state = _market_state(market)
+    market = state["market"]
+    model = state["model"]
+    model_name = state["model_name"]
+    lookup = state["lookup"]
+    if model is None:
+        return _err(f"{market} market model not available.", 503)
     if not portfolio or not isinstance(portfolio, list):
-        return _err("'portfolio' must be a non-empty list of {symbol, qty} objects.")
+        return _err("'portfolio' must be a non-empty list of {symbol, qty[, price]} objects.")
     if len(portfolio) > 50:
         return _err("Maximum 50 positions per request.")
 
@@ -571,36 +755,47 @@ def predict():
             return _err(f"Item {i}: expected an object, got {type(item).__name__}.")
         sym = item.get("symbol")
         qty = item.get("qty")
+        price = item.get("price")
         if not sym or not isinstance(sym, str) or not sym.strip():
             return _err(f"Item {i}: 'symbol' must be a non-empty string.")
         if qty is None or not isinstance(qty, (int, float)) or qty <= 0:
             return _err(f"Item {i} ({sym}): 'qty' must be a positive number.")
-        validated.append({"symbol": sym.strip().upper(), "qty": float(qty)})
+        if price is not None and (not isinstance(price, (int, float)) or float(price) <= 0):
+            return _err(f"Item {i} ({sym}): 'price' must be a positive number when provided.")
+        validated.append({
+            "symbol": sym.strip().upper(),
+            "qty": float(qty),
+            "price": float(price) if price is not None else None,
+        })
 
     # Deduplicate (sum qty for repeated symbols)
     seen = {}
     for h in validated:
-        seen[h["symbol"]] = seen.get(h["symbol"], 0) + h["qty"]
-    validated = [{"symbol": s, "qty": q} for s, q in seen.items()]
+        sym = h["symbol"]
+        if sym not in seen:
+            seen[sym] = {"qty": 0.0, "price": h.get("price")}
+        seen[sym]["qty"] += h["qty"]
+        if h.get("price") is not None:
+            seen[sym]["price"] = h.get("price")
+    validated = [{"symbol": s, "qty": v["qty"], "price": v.get("price")} for s, v in seen.items()]
 
     # ── 2. Fetch latest features ───────────────────────────────────────────────
-    records, missing = [], []
+    records, missing, estimated_prices = [], [], []
 
     for holding in validated:
         sym = holding["symbol"]
         qty = holding["qty"]
+        req_price = holding.get("price")
 
         if sym not in lookup.index:
             missing.append(sym)
             continue
 
-        row   = lookup.loc[sym]
-        close = row.get("close", row.get("open", np.nan))
-        if pd.isna(close):
-            missing.append(sym)
-            continue
+        row = lookup.loc[sym]
+        close = float(req_price) if req_price is not None else 1.0
+        if req_price is None:
+            estimated_prices.append(sym)
 
-        close            = float(close)
         position_value   = qty * close
         daily_volume_usd = float(row["volume"]) * close
 
@@ -669,6 +864,11 @@ def predict():
     warnings = []
     if missing:
         warnings.append(f"Symbols not found (skipped): {', '.join(missing)}")
+    if estimated_prices:
+        warnings.append(
+            "Price not provided for symbols (using 1.0 fallback): "
+            + ", ".join(estimated_prices)
+        )
     very_illiquid = df[df["liquidity_score"] < 0.30]["symbol"].tolist()
     if very_illiquid:
         warnings.append(f"Very illiquid positions: {', '.join(very_illiquid)}")
@@ -720,9 +920,6 @@ def explain():
           "market_context": {...}
         }
     """
-    if not ADVANCED_FEATURES:
-        return _err("Advanced prediction features not available. Run pipeline setup first.", 503)
-    
     # ── 1. Parse request ───────────────────────────────────────────────────────
     body = request.get_json(silent=True)
     if not body:
@@ -740,18 +937,21 @@ def explain():
         if symbol:
             log.info(f"Generating explanation for {symbol} ({market} market)")
             
-            # Get future predictions
-            prediction = predict_future_liquidity(symbol, market)
+            # Future prediction from in-memory precomputed feature cache.
+            prediction = _predict_future_from_cached_features(symbol, market)
             
-            # Get market context
-            context = get_market_context(symbol, market, days_back=30)
+            # Market context from in-memory feature history.
+            context = _market_context_from_cache(symbol, market, days_back=30)
             
             # Generate AI explanation
-            explanation = explain_liquidity_prediction(
-                prediction, 
-                market_context=context,
-                use_llm=True
-            )
+            if LLM_EXPLANATION_AVAILABLE:
+                explanation = explain_liquidity_prediction(
+                    prediction,
+                    market_context=context,
+                    use_llm=True,
+                )
+            else:
+                explanation = _rule_based_explain(prediction, market_context=context)
             
             # Build response
             preds = prediction['predictions']
@@ -774,19 +974,23 @@ def explain():
             if not isinstance(portfolio, list) or len(portfolio) == 0:
                 return _err("'portfolio' must be a non-empty list")
             
-            # Get portfolio predictions
-            prediction = predict_portfolio_future(portfolio, market)
+            # Get portfolio predictions from cached feature data.
+            prediction = _predict_portfolio_future_from_cache(portfolio, market)
             
             # Generate explanation
-            explanation = explain_liquidity_prediction(
-                {
-                    'symbol': 'Portfolio',
-                    'current_liquidity': prediction['current_liquidity'],
-                    'predictions': prediction['predictions']
-                },
-                market_context=None,
-                use_llm=True
-            )
+            explain_payload = {
+                'symbol': 'Portfolio',
+                'current_liquidity': prediction['current_liquidity'],
+                'predictions': prediction['predictions']
+            }
+            if LLM_EXPLANATION_AVAILABLE:
+                explanation = explain_liquidity_prediction(
+                    explain_payload,
+                    market_context=None,
+                    use_llm=True,
+                )
+            else:
+                explanation = _rule_based_explain(explain_payload, market_context=None)
             
             # Build response
             preds = prediction['predictions']
