@@ -137,7 +137,7 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
                     <div className="flex items-center gap-1.5 mt-1.5">
                       {up ? <TrendingUp className="w-3.5 h-3.5" style={{ color: "#16C784" }} /> : <TrendingDown className="w-3.5 h-3.5" style={{ color: "#EA3943" }} />}
                       <span style={{ fontSize: 13, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", color: up ? "#16C784" : "#EA3943" }}>
-                        {up ? "+" : ""}{change.toFixed(2)} ({up ? "+" : ""}{pct.toFixed(2)}%)
+                        {up ? "+" : ""}{currencySymbol}{Math.abs(change).toFixed(2)} ({up ? "+" : "-"}{Math.abs(pct).toFixed(2)}%)
                       </span>
                     </div>
                   </>

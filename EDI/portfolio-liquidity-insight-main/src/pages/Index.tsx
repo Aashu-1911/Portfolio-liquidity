@@ -289,6 +289,7 @@ const Index = () => {
                 <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <ResultsDisplay
                     result={result}
+                    market="US"
                     onDownloadReport={handleDownloadReport}
                     reportLoading={reportLoading}
                   />

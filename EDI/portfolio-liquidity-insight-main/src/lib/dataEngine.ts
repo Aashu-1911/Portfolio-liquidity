@@ -120,7 +120,7 @@ export async function predictPortfolio(
     estimated_liquidation_time: data.liquidation_time,
     price_impact:               data.price_impact,
     most_illiquid_asset:        data.most_illiquid_asset,
-    portfolio_value:            data.portfolio_value,
+    portfolio_value:            normalizeMoneyDisplay(data.portfolio_value, market),
     model_used:                 data.model_used,
     total_positions:            data.total_positions,
     warnings:                   data.warnings ?? [],
@@ -142,6 +142,19 @@ export async function predictPortfolio(
       amihud_ratio:     a.amihud_ratio,
     })),
   };
+}
+
+function normalizeMoneyDisplay(value: string, market: string): string {
+  const symbol = market.toUpperCase() === "INDIA" ? "₹" : "$";
+  if (!value) return `${symbol}0.00`;
+
+  const num = Number(String(value).replace(/[₹$,\s]/g, "").replace(/,/g, ""));
+  if (!Number.isFinite(num)) return String(value);
+
+  return `${symbol}${num.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 // ============================================================

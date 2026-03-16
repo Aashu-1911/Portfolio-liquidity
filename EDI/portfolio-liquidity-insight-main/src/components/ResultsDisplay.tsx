@@ -5,11 +5,17 @@ import LiquidityRiskBar from "./LiquidityRiskBar";
 
 interface ResultsDisplayProps {
   result: PortfolioResult;
+  market?: "US" | "INDIA";
   onDownloadReport?: () => void;
   reportLoading?: boolean;
 }
 
-export default function ResultsDisplay({ result, onDownloadReport, reportLoading = false }: ResultsDisplayProps) {
+export default function ResultsDisplay({ result, market = "US", onDownloadReport, reportLoading = false }: ResultsDisplayProps) {
+  const currencySymbol = market === "INDIA" ? "₹" : "$";
+  const normalizedPortfolioValue = result.portfolio_value
+    ? result.portfolio_value.replace(/^[₹$]/, currencySymbol)
+    : `${currencySymbol}0.00`;
+
   const riskInfo = {
     Low:      { color: "#16C784", bg: "rgba(22,199,132,0.07)", border: "rgba(22,199,132,0.2)" },
     Moderate: { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.2)"  },
@@ -21,7 +27,7 @@ export default function ResultsDisplay({ result, onDownloadReport, reportLoading
     { label: "Liquidation Time",  value: result.estimated_liquidation_time,  icon: Clock,         color: "#3B82F6", bg: "rgba(59,130,246,0.07)",  border: "rgba(59,130,246,0.2)" },
     { label: "Price Impact",      value: result.price_impact,                icon: TrendingDown,  color: "#F59E0B", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.2)" },
     { label: "Most Illiquid",     value: result.most_illiquid_asset,         icon: AlertTriangle, color: "#EA3943", bg: "rgba(234,57,67,0.07)",   border: "rgba(234,57,67,0.2)"  },
-    { label: "Portfolio Value",   value: result.portfolio_value,             icon: DollarSign,    color: "#16C784", bg: "rgba(22,199,132,0.07)",  border: "rgba(22,199,132,0.2)" },
+    { label: "Portfolio Value",   value: normalizedPortfolioValue,           icon: DollarSign,    color: "#16C784", bg: "rgba(22,199,132,0.07)",  border: "rgba(22,199,132,0.2)" },
     { label: "Total Positions",   value: String(result.total_positions),     icon: Info,          color: "#6B7280", bg: "rgba(107,114,128,0.06)", border: "rgba(107,114,128,0.15)" },
   ];
 
