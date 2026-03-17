@@ -23,6 +23,7 @@ interface StockPriceChartProps {
 }
 
 const COLORS = ["#16C784", "#3B82F6", "#F59E0B", "#EA3943", "#A78BFA", "#22D3EE"];
+const INTRADAY_TICK_LABELS = ["10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"];
 
 function getCurrencySymbol(market: string): string {
   return market.toUpperCase() === "INDIA" ? "₹" : "$";
@@ -76,6 +77,44 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
   }, [range, market, chartSymbols]);
 
   const singleSeries = singleMode ? historyMap[chartSymbols[0]] ?? [] : [];
+  const singleSeriesWithIndex = useMemo(
+    () => singleSeries.map((point: any, index: number) => ({ ...point, __idx: index })),
+    [singleSeries]
+  );
+
+  const intradayTickPositions = useMemo(() => {
+    if (range !== "1D" || singleSeriesWithIndex.length <= 1) return [] as number[];
+
+    const maxIndex = singleSeriesWithIndex.length - 1;
+    const rawTicks = INTRADAY_TICK_LABELS.map((_, idx) =>
+      Math.round((idx / (INTRADAY_TICK_LABELS.length - 1)) * maxIndex)
+    );
+
+    // Keep ticks unique for very short series while preserving order.
+    return Array.from(new Set(rawTicks));
+  }, [range, singleSeriesWithIndex]);
+
+  const formatIntradayTick = (tick: number): string => {
+    if (!intradayTickPositions.length) return "";
+
+    let closest = 0;
+    let minDistance = Infinity;
+
+    intradayTickPositions.forEach((pos, idx) => {
+      const distance = Math.abs(Number(tick) - pos);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closest = idx;
+      }
+    });
+
+    return INTRADAY_TICK_LABELS[closest] ?? "";
+  };
+
+  const singleTooltipLabelFormatter = (label: any): string => {
+    if (range !== "1D") return String(label ?? "");
+    return formatIntradayTick(Number(label));
+  };
 
   const compareSeries = useMemo(() => {
     if (singleMode || !chartSymbols.length) return [] as any[];
@@ -197,9 +236,29 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
             {!loading && singleMode && (
               <>
                 <ResponsiveContainer width="100%" height={230}>
-                  <LineChart data={singleSeries} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <LineChart data={singleSeriesWithIndex} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid stroke="#1F2937" strokeDasharray="3 3" strokeOpacity={0.6} vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} interval={Math.floor(Math.max(1, singleSeries.length / 6))} />
+                    {range === "1D" ? (
+                      <XAxis
+                        type="number"
+                        dataKey="__idx"
+                        domain={[0, Math.max(0, singleSeriesWithIndex.length - 1)]}
+                        ticks={intradayTickPositions}
+                        tickFormatter={formatIntradayTick}
+                        tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval={0}
+                      />
+                    ) : (
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval={Math.floor(Math.max(1, singleSeries.length / 6))}
+                      />
+                    )}
                     <YAxis
                       domain={singlePriceDomain}
                       tickCount={7}
@@ -209,15 +268,15 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
                       width={54}
                       tickFormatter={(v) => `${currencySymbol}${Number(v).toFixed(0)}`}
                     />
-                    <Tooltip formatter={(v: any) => fmtCurrency(Number(v), market)} />
+                    <Tooltip formatter={(v: any) => fmtCurrency(Number(v), market)} labelFormatter={singleTooltipLabelFormatter} />
                     <Line type="monotone" dataKey="close" stroke={up ? "#16C784" : "#EA3943"} strokeWidth={2.4} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
 
                 <div className="mt-2">
                   <ResponsiveContainer width="100%" height={58}>
-                    <ComposedChart data={singleSeries} margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
-                      <XAxis dataKey="label" hide />
+                    <ComposedChart data={singleSeriesWithIndex} margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
+                      <XAxis dataKey={range === "1D" ? "__idx" : "label"} hide />
                       <YAxis hide domain={["auto", "auto"]} />
                       <Bar dataKey="volume" fill="rgba(59,130,246,0.35)" radius={[2, 2, 0, 0]} />
                     </ComposedChart>
