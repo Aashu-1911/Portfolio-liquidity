@@ -104,6 +104,28 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
   const pct = first > 0 ? (change / first) * 100 : 0;
   const up = change >= 0;
 
+  const singlePriceDomain = useMemo<[number, number]>(() => {
+    if (!singleSeries.length) return [0, 1];
+
+    const closes = singleSeries
+      .map((p: any) => Number(p?.close))
+      .filter((v) => Number.isFinite(v));
+
+    if (!closes.length) return [0, 1];
+
+    const minPrice = Math.min(...closes);
+    const maxPrice = Math.max(...closes);
+    const spread = maxPrice - minPrice;
+
+    // Keep axis tight around observed prices, but with enough breathing room.
+    const pad = Math.max(spread * 0.18, maxPrice * 0.004, 1);
+    const lower = Math.max(0, minPrice - pad);
+    const upper = maxPrice + pad;
+
+    if (upper <= lower) return [Math.max(0, minPrice - 1), maxPrice + 1];
+    return [lower, upper];
+  }, [singleSeries]);
+
   const ranges: TimeRange[] = ["1D", "5D", "1M", "3M", "1Y"];
   const currencySymbol = getCurrencySymbol(market);
 
@@ -178,7 +200,15 @@ export default function StockPriceChart({ symbol, symbols = [], market = "US" }:
                   <LineChart data={singleSeries} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid stroke="#1F2937" strokeDasharray="3 3" strokeOpacity={0.6} vertical={false} />
                     <XAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} interval={Math.floor(Math.max(1, singleSeries.length / 6))} />
-                    <YAxis tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} axisLine={false} tickLine={false} width={54} tickFormatter={(v) => `${currencySymbol}${v.toFixed(0)}`} />
+                    <YAxis
+                      domain={singlePriceDomain}
+                      tickCount={7}
+                      tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={54}
+                      tickFormatter={(v) => `${currencySymbol}${Number(v).toFixed(0)}`}
+                    />
                     <Tooltip formatter={(v: any) => fmtCurrency(Number(v), market)} />
                     <Line type="monotone" dataKey="close" stroke={up ? "#16C784" : "#EA3943"} strokeWidth={2.4} dot={false} />
                   </LineChart>
