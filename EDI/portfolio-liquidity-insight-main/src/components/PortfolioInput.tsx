@@ -103,9 +103,10 @@ export default function PortfolioInput({
             onClick={onCompareAll}
             className="ml-2 rounded-full px-2.5 py-1 text-[10px] font-semibold"
             style={{
-              color: "#93C5FD",
-              border: "1px solid rgba(147,197,253,0.35)",
-              background: "rgba(59,130,246,0.16)",
+              color: "#FDE68A",
+              border: "1px solid rgba(245,158,11,0.55)",
+              background: "linear-gradient(135deg, rgba(245,158,11,0.28), rgba(217,119,6,0.22))",
+              boxShadow: "0 0 0 1px rgba(245,158,11,0.18), 0 6px 14px rgba(245,158,11,0.18)",
               letterSpacing: "0.04em",
             }}
           >
