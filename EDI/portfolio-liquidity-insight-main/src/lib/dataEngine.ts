@@ -21,18 +21,78 @@ function resolveApiBase(): string {
   return "https://liquidity-api-s804.onrender.com";
 }
 
+const SYMBOL_CACHE_PREFIX = "liquidity_symbols_v1_";
+const SYMBOL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+type SymbolCacheEntry = {
+  symbols: string[];
+  updatedAt: number;
+};
+
+function getSymbolCacheKey(market: string): string {
+  return `${SYMBOL_CACHE_PREFIX}${market.toUpperCase()}`;
+}
+
+function readSymbolCache(market: string): string[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = localStorage.getItem(getSymbolCacheKey(market));
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as SymbolCacheEntry;
+    if (!Array.isArray(parsed?.symbols)) return [];
+
+    const age = Date.now() - Number(parsed.updatedAt || 0);
+    if (age > SYMBOL_CACHE_TTL_MS) return [];
+
+    return parsed.symbols
+      .map((s) => String(s).trim().toUpperCase())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function writeSymbolCache(market: string, symbols: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const unique = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
+    const payload: SymbolCacheEntry = {
+      symbols: unique,
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(getSymbolCacheKey(market), JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures (e.g. private mode quota).
+  }
+}
+
+export function getCachedStockSymbols(market: string = "US"): string[] {
+  return readSymbolCache(market);
+}
+
 // ============================================================
 // GET /stocks  →  ticker list for the search autocomplete
 // ============================================================
-export async function getStockSymbols(market: string = "US"): Promise<string[]> {
+export async function getStockSymbols(market: string = "US", forceRefresh: boolean = false): Promise<string[]> {
+  if (!forceRefresh) {
+    const cached = readSymbolCache(market);
+    if (cached.length) return cached;
+  }
+
   try {
     const res = await fetch(`${API_BASE}/stocks?market=${market}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    return (data.symbols as string[]) ?? [];
+    const symbols = (data.symbols as string[]) ?? [];
+    if (symbols.length) {
+      writeSymbolCache(market, symbols);
+    }
+    return symbols;
   } catch (err) {
     console.error("getStockSymbols failed:", err);
-    return [];
+    return readSymbolCache(market);
   }
 }
 

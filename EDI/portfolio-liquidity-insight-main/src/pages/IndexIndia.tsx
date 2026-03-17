@@ -16,7 +16,7 @@ import AdvancedLiquidityMetrics from "@/components/AdvancedLiquidityMetrics";
 import MarketNewsPanel          from "@/components/MarketNewsPanel";
 import AIInsightCards           from "@/components/AIInsightCards";
 
-import { getStockSymbols, predictPortfolio, explainPortfolio, downloadLiquidityReport } from "@/lib/dataEngine";
+import { getCachedStockSymbols, getStockSymbols, predictPortfolio, explainPortfolio, downloadLiquidityReport } from "@/lib/dataEngine";
 import type { PortfolioAsset, PortfolioResult } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -46,10 +46,36 @@ const IndexIndia = () => {
   ];
 
   useEffect(() => {
-    getStockSymbols("INDIA")
-      .then((s) => setSymbols(s))
-      .catch(() => setSymbols([]))
-      .finally(() => setDataLoading(false));
+    let cancelled = false;
+    let unblockTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cached = getCachedStockSymbols("INDIA");
+    if (cached.length) {
+      setSymbols(cached);
+      setDataLoading(false);
+    } else {
+      // Do not keep the full page blocked for slow cold starts.
+      unblockTimer = setTimeout(() => {
+        if (!cancelled) setDataLoading(false);
+      }, 1200);
+    }
+
+    getStockSymbols("INDIA", true)
+      .then((s) => {
+        if (!cancelled && s.length) setSymbols(s);
+      })
+      .catch(() => {
+        if (!cancelled && !cached.length) setSymbols([]);
+      })
+      .finally(() => {
+        if (unblockTimer) clearTimeout(unblockTimer);
+        if (!cancelled) setDataLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (unblockTimer) clearTimeout(unblockTimer);
+    };
   }, []);
 
   const handleSubmit = async (portfolio: PortfolioAsset[]) => {
