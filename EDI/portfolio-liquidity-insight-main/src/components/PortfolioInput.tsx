@@ -101,7 +101,7 @@ export default function PortfolioInput({
           <button
             type="button"
             onClick={onCompareAll}
-            className="ml-2 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+            className="ml-2 rounded-full px-2.5 py-1 text-[10px] font-semibold transition-all duration-200 hover:scale-105 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:scale-105 focus-visible:ring-2 focus-visible:ring-amber-300/70"
             style={{
               color: "#FDE68A",
               border: "1px solid rgba(245,158,11,0.55)",
