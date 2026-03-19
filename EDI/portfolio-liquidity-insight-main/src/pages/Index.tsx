@@ -185,13 +185,13 @@ const Index = () => {
       {mlLoading && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-xl border text-xs sm:text-sm flex items-center gap-2"
           style={{
-            background: "rgba(15,23,42,0.95)",
-            borderColor: "rgba(59,130,246,0.35)",
-            color: "#E5E7EB",
-            boxShadow: "0 8px 30px rgba(2,6,23,0.45)",
+            background: "rgba(69,10,10,0.92)",
+            borderColor: "rgba(248,113,113,0.65)",
+            color: "#FEE2E2",
+            boxShadow: "0 8px 30px rgba(127,29,29,0.45)",
             backdropFilter: "blur(10px)",
           }}>
-          <Loader2 className="w-4 h-4 animate-spin text-[#3B82F6]" />
+          <Loader2 className="w-4 h-4 animate-spin text-[#F87171]" />
           <span>Please wait, ML is loading features...</span>
         </div>
       )}
