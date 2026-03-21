@@ -67,7 +67,6 @@ const Index = () => {
       .then((s) => {
         if (!cancelled && s.length) {
           setSymbols(s);
-          setMlLoading(false);
         }
       })
       .catch(() => {
@@ -75,7 +74,10 @@ const Index = () => {
       })
       .finally(() => {
         if (unblockTimer) clearTimeout(unblockTimer);
-        if (!cancelled) setDataLoading(false);
+        if (!cancelled) {
+          setDataLoading(false);
+          setMlLoading(false);
+        }
       });
 
     return () => {

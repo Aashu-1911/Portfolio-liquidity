@@ -2,6 +2,11 @@ import type { PortfolioAsset, PortfolioResult } from "./types";
 
 // ── Flask API base URL ─────────────────────────────────────────────────────────
 const API_BASE = resolveApiBase();
+const DEFAULT_HEADERS = { "Content-Type": "application/json" };
+const STOCKS_TIMEOUT_MS = 20000;
+const READ_TIMEOUT_MS = 60000;
+const WRITE_TIMEOUT_MS = 90000;
+const RETRY_DELAY_MS = 1200;
 
 if (typeof window !== "undefined") {
   console.info("[ML API] Base URL:", API_BASE);
@@ -10,7 +15,7 @@ if (typeof window !== "undefined") {
 function resolveApiBase(): string {
   const fromEnv = (import.meta.env.VITE_ML_API_BASE as string | undefined)?.trim();
   if (fromEnv) {
-    return fromEnv.replace(/\/+$/, "");
+    return sanitizeMlBase(fromEnv);
   }
 
   // Local dev keeps existing behavior, production uses hosted ML fallback.
@@ -18,7 +23,103 @@ function resolveApiBase(): string {
     return "http://localhost:5000";
   }
 
-  return "https://liquidity-api-s804.onrender.com";
+  return sanitizeMlBase("https://liquidity-api-s804.onrender.com");
+}
+
+function sanitizeMlBase(value: string): string {
+  const cleaned = (value || "").trim().replace(/\/+$/, "");
+  if (!cleaned) return "https://liquidity-api-s804.onrender.com";
+
+  // Flask ML endpoints live at root: /stocks, /predict, /explain.
+  if (cleaned.toLowerCase().endsWith("/api")) {
+    return cleaned.slice(0, -4);
+  }
+
+  return cleaned;
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isRetriableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function isRetriableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message.toLowerCase();
+  return error.name === "AbortError" || msg.includes("network") || msg.includes("failed to fetch");
+}
+
+async function parseJsonResponse<T>(res: Response, url: string): Promise<T> {
+  const contentType = (res.headers.get("Content-Type") || "").toLowerCase();
+  if (!contentType.includes("application/json")) {
+    const text = await res.text().catch(() => "");
+    const sample = text.slice(0, 140).replace(/\s+/g, " ").trim();
+    throw new Error(`Expected JSON from ${url} but received non-JSON response: ${sample || "<empty>"}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+async function parseErrorResponse(res: Response): Promise<string> {
+  const contentType = (res.headers.get("Content-Type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    const data = await res.json().catch(() => ({}));
+    return (data as any).error || (data as any).message || `HTTP ${res.status}`;
+  }
+
+  const text = await res.text().catch(() => "");
+  const sample = text.slice(0, 140).replace(/\s+/g, " ").trim();
+  return sample ? `HTTP ${res.status} - ${sample}` : `HTTP ${res.status}`;
+}
+
+async function fetchJson<T>(url: string, init: RequestInit = {}, timeoutMs: number): Promise<T> {
+  const res = await fetchWithTimeout(url, init, timeoutMs);
+  if (!res.ok) {
+    throw new Error(await parseErrorResponse(res));
+  }
+  return parseJsonResponse<T>(res, url);
+}
+
+async function fetchJsonWithRetry<T>(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number,
+  retries: number
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetchJson<T>(url, init, timeoutMs);
+    } catch (error) {
+      lastError = error;
+      const status = Number((error as Error)?.message?.match(/HTTP\s+(\d{3})/)?.[1]);
+      const canRetry = attempt < retries && (isRetriableError(error) || (Number.isFinite(status) && isRetriableStatus(status)));
+      if (!canRetry) {
+        throw error;
+      }
+      await sleep(RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Unknown fetch failure");
 }
 
 const SYMBOL_CACHE_PREFIX = "liquidity_symbols_v1_";
@@ -82,9 +183,12 @@ export async function getStockSymbols(market: string = "US", forceRefresh: boole
   }
 
   try {
-    const res = await fetch(`${API_BASE}/stocks?market=${market}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const data = await fetchJsonWithRetry<{ symbols?: string[] }>(
+      `${API_BASE}/stocks?market=${encodeURIComponent(market)}`,
+      {},
+      STOCKS_TIMEOUT_MS,
+      2
+    );
     const symbols = (data.symbols as string[]) ?? [];
     if (symbols.length) {
       writeSymbolCache(market, symbols);
@@ -103,14 +207,12 @@ export async function getLiveQuotes(
   const cleaned = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
   if (!cleaned.length) return {};
 
-  const res = await fetch(
-    `${API_BASE}/quotes?market=${encodeURIComponent(market)}&symbols=${encodeURIComponent(cleaned.join(","))}`
+  const data = await fetchJsonWithRetry<{ quotes?: Record<string, number> }>(
+    `${API_BASE}/quotes?market=${encodeURIComponent(market)}&symbols=${encodeURIComponent(cleaned.join(","))}`,
+    {},
+    READ_TIMEOUT_MS,
+    1
   );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error ?? `HTTP ${res.status}`);
-  }
-  const data = await res.json();
   return (data.quotes as Record<string, number>) ?? {};
 }
 
@@ -122,14 +224,12 @@ export async function getPriceHistory(
   const cleaned = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
   if (!cleaned.length) return {};
 
-  const res = await fetch(
-    `${API_BASE}/price-history?market=${encodeURIComponent(market)}&range=${encodeURIComponent(range)}&symbols=${encodeURIComponent(cleaned.join(","))}`
+  const data = await fetchJsonWithRetry<{ history?: Record<string, any[]> }>(
+    `${API_BASE}/price-history?market=${encodeURIComponent(market)}&range=${encodeURIComponent(range)}&symbols=${encodeURIComponent(cleaned.join(","))}`,
+    {},
+    READ_TIMEOUT_MS,
+    1
   );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error ?? `HTTP ${res.status}`);
-  }
-  const data = await res.json();
   return (data.history as Record<string, any[]>) ?? {};
 }
 
@@ -153,18 +253,16 @@ export async function predictPortfolio(
     price: quotes[p.symbol.toUpperCase()] ?? p.price,
   }));
 
-  const res = await fetch(`${API_BASE}/predict`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ portfolio: payloadPortfolio, market }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error ?? `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
+  const data = await fetchJsonWithRetry<any>(
+    `${API_BASE}/predict`,
+    {
+      method: "POST",
+      headers: DEFAULT_HEADERS,
+      body: JSON.stringify({ portfolio: payloadPortfolio, market }),
+    },
+    WRITE_TIMEOUT_MS,
+    1
+  );
 
   // ── Map every Flask field → PortfolioResult ────────────────────────────────
   //
@@ -224,36 +322,32 @@ export async function explainPortfolio(
   portfolio: PortfolioAsset[],
   market: string = "US"
 ): Promise<any> {
-  const res = await fetch(`${API_BASE}/explain`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ portfolio, market }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error ?? `HTTP ${res.status}`);
-  }
-
-  return await res.json();
+  return fetchJsonWithRetry<any>(
+    `${API_BASE}/explain`,
+    {
+      method: "POST",
+      headers: DEFAULT_HEADERS,
+      body: JSON.stringify({ portfolio, market }),
+    },
+    WRITE_TIMEOUT_MS,
+    1
+  );
 }
 
 export async function explainSymbol(
   symbol: string,
   market: string = "US"
 ): Promise<any> {
-  const res = await fetch(`${API_BASE}/explain`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ symbol, market }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).error ?? `HTTP ${res.status}`);
-  }
-
-  return await res.json();
+  return fetchJsonWithRetry<any>(
+    `${API_BASE}/explain`,
+    {
+      method: "POST",
+      headers: DEFAULT_HEADERS,
+      body: JSON.stringify({ symbol, market }),
+    },
+    WRITE_TIMEOUT_MS,
+    1
+  );
 }
 
 // ============================================================
@@ -265,19 +359,19 @@ export async function downloadLiquidityReport(payload: {
   portfolio_result: PortfolioResult;
   ai_insights?: any;
 }): Promise<void> {
-  let res = await fetch(`${API_BASE}/generate-liquidity-report`, {
+  let res = await fetchWithTimeout(`${API_BASE}/generate-liquidity-report`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: DEFAULT_HEADERS,
     body: JSON.stringify(payload),
-  });
+  }, WRITE_TIMEOUT_MS);
 
   // Some deployments may have strict trailing-slash routing.
   if (res.status === 404 || res.status === 405) {
-    const retry = await fetch(`${API_BASE}/generate-liquidity-report/`, {
+    const retry = await fetchWithTimeout(`${API_BASE}/generate-liquidity-report/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: DEFAULT_HEADERS,
       body: JSON.stringify(payload),
-    });
+    }, WRITE_TIMEOUT_MS);
     if (retry.ok) {
       res = retry;
     }
